@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Renders Skyward Sword HD models. The game's shaders are one GX (Wii) emulator configured by #defines;
+    this library reproduces that as a single uber shader driven by uniforms, reads the game's own BRRES
+    models and XTX textures, and runs the painterly post chain (depth-of-field, paint dilation, bloom).
+  -->
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Renders Skyward Sword HD models with a GX uber shader and the game's painterly post-processing.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+    <PackageReference Include="AstcSharp" Version="3.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SkywardRenderingSharp.TestBench" />
+    <InternalsVisibleTo Include="SkywardRenderingSharp.Tests" />
+    <EmbeddedResource Include="Glsl\**\*" LogicalName="Glsl/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SkywardRenderingSharp/SkywardRenderingSharp.csproj" />
+    <Project Path="src/SkywardViewer/SkywardViewer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SkywardRenderingSharp.TestBench/SkywardRenderingSharp.TestBench.csproj" />
+    <Project Path="tests/SkywardRenderingSharp.Tests/SkywardRenderingSharp.Tests.csproj" />
+  </Folder>
+</Solution>
