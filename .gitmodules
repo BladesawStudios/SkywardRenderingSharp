@@ -25,3 +25,6 @@
 [submodule "lib/SkywardPaletteSharp"]
 	path = lib/SkywardPaletteSharp
 	url = https://github.com/Mindstormman06/SkywardPaletteSharp.git
+[submodule "lib/BzsSharp"]
+	path = lib/BzsSharp
+	url = https://github.com/Mindstormman06/BzsSharp.git
