@@ -77,8 +77,7 @@ public sealed class SkywardRenderer : IDisposable
         var attachments = Attachments.Select(loaded[main], others);
         // An archive ID whose models do not hang from one skeleton (a stage) loads them all, each placed as authored.
         if (!isModel && attachments.Count == 0) attachments = others.Select(o => (o, new int[o.Model.Bones.Count].Select(_ => -1).ToArray())).ToList();
-        var shared = loaded[main].Model.Bones.Any(b => b.Name == "backbone1") && _rom.Index.Find("al").Count > 0 ? _rom.OpenAnimations("PLCommonAnime") : null;
-        return new SceneObject(id, loaded[main], attachments, new AnimationSet(package.Bres, shared));
+        return new SceneObject(id, loaded[main], attachments, _rom.AnimationsOf(package, loaded[main].Model));
     }
 
     

@@ -4,6 +4,7 @@ using SkywardRenderingSharp.Animation;
 using SkywardRenderingSharp.Archives;
 using SkywardRenderingSharp.Content;
 using SkywardRenderingSharp.Lighting;
+using SkywardRenderingSharp.Model;
 using SkywardRenderingSharp.Shaders;
 using SkywardRenderingSharp.Textures;
 using TexSharp;
@@ -92,6 +93,12 @@ public sealed class SkywardRom
         .Select(p => Path.GetFileNameWithoutExtension(p));
 
     /// <summary>Opens an animation library archive such as PLCommonAnime (Link's clips).</summary>
+    /// <summary>The clips a model can play: its own file's, and Link's shared library (PLCommonAnime) when its skeleton is Link's (it has "backbone1").</summary>
+    public AnimationSet AnimationsOf(ModelArchive package, Mdl0Model model) =>
+        new(package.Bres, model.Bones.Any(b => b.Name == "backbone1") && Index.Find("al").Count > 0 ? _linkClips ??= OpenAnimations("PLCommonAnime") : null);
+
+    AnimationLibrary? _linkClips;
+
     public AnimationLibrary OpenAnimations(string name) =>
         new(GameArchive.Open(_objectPack.Get($"oarc/{name}.arc")).Get("g3d/model.brres"));
 
