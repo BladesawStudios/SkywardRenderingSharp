@@ -1,11 +1,17 @@
 <Project>
-  <!-- Shared by every project in this repository. -->
+  <!-- Shared by every project in this repository, and the library roots by the submodules in lib as well. -->
   <!-- A props file above this repository (one checking out several libraries side by side) still applies. -->
   <PropertyGroup>
     <SrsParentProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..'))</SrsParentProps>
   </PropertyGroup>
   <Import Project="$(SrsParentProps)" Condition="'$(SrsParentProps)' != ''" />
+  <!-- The libraries are submodules in lib, and each finds its own dependencies through these roots, so all of them share one copy. -->
   <PropertyGroup>
+    <SrsLibRoot Condition="'$(SrsLibRoot)' == ''">$(MSBuildThisFileDirectory)lib</SrsLibRoot>
+    <XtxLibRoot Condition="'$(XtxLibRoot)' == ''">$(SrsLibRoot)</XtxLibRoot>
+    <BntxLibRoot Condition="'$(BntxLibRoot)' == ''">$(SrsLibRoot)</BntxLibRoot>
+  </PropertyGroup>
+  <PropertyGroup Condition="!$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)lib'))">
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

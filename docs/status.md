@@ -233,6 +233,17 @@ depth-of-field passes, so the paint image's max filter bleeds bright edges (Link
 distant sky blurs with depth of field. Still stand-ins: the paint alpha (`PaintConstant`), the order the constant and near/far paint passes blend in,
 and the blur's gain of 4, which the chain divides out where it uses the blurred images.
 
+## Read through the libraries
+
+The game's formats are read by the C# libraries (submodules in `lib`) and no longer by readers of the renderer's own. Renders of Link are unchanged to the pixel
+(at most one level of rounding), and the 16 tests, every XTX texture (280 in 82 archives) and every shader program still read. Three things changed:
+
+- **Animation keys.** BresSharp reads every CHR0 key layout, so no track falls back to its bind value any more.
+- **XTX pairing.** A TEX0 takes an XTX texture when its word at 0x34 is set (BresSharp's `XtxTextureSlots`), not when it is 1x1.
+- **The .eaf.** It holds 32 records of 160 bytes, not 20 of 256: reading it as 20 slots took every slot past 0 from the middle of a record (slot 6's "sky and ground"
+  were 00000000 and ffffffff). The records do not follow the slots (in F000 only records 0, 1, 3, 4 and 13 hold colours), so every slot takes the stage's first
+  record (F000: 969696 sky, 645032 ground), whose average is close to the grey the stage lighting was tuned against. Which record the game uses for a slot is not known.
+
 ## Still open
 
 - The render pass behind `SSS`, the scene colour encoding behind the bloom strength, and which slot pair and blend factor the engine picks for a given time of day.

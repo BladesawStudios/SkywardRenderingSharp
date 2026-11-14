@@ -25,7 +25,6 @@ return args[0] switch
     "texcheck" => TexCheck(rom),
     "clips" => Clips(rom),
     "find" => Find(rom, args[2]),
-    "animcheck" => AnimCheck(rom),
     "lightmaps" => Lightmaps(rom),
     "gra" => Gra(args[1]),
     "texstats" => TexStats(rom, args[2], args[3]),
@@ -52,14 +51,14 @@ static int TexStats(SkywardRom rom, string model, string texture)
 
 static int Gra(string romfs)
 {
-    var system = SkywardRenderingSharp.Archives.U8Archive.OpenFile(Path.Combine(romfs, "Object", "NX", "System.arc"));
-    foreach (string path in system.Paths.Where(p => p.EndsWith(".bti")))
+    var system = SkywardRenderingSharp.Archives.GameArchive.OpenFile(Path.Combine(romfs, "Object", "NX", "System.arc"));
+    foreach (string path in SkywardRenderingSharp.Archives.GameArchive.Paths(system).Where(p => p.EndsWith(".bti")))
     {
-        var d = system.Get(path).Span;
-        int fmt = d[0], w = d[2] << 8 | d[3], h = d[4] << 8 | d[5];
-        var img = SkywardRenderingSharp.Textures.WiiTexture.Decode(d[32..], w, h, (SkywardRenderingSharp.Textures.WiiTexture.Format)fmt);
-        Console.WriteLine($"{path} fmt{fmt} {w}x{h}");
-        for (int y = 0; y < h; y++) Console.WriteLine("   " + string.Join(" ", Enumerable.Range(0, w).Where(x => x % 4 == 0).Select(x => $"{img.Pixels[(y * w + x) * 4]:x2}/{img.Pixels[(y * w + x) * 4 + 1]:x2}/{img.Pixels[(y * w + x) * 4 + 2]:x2}/{img.Pixels[(y * w + x) * 4 + 3]:x2}")));
+        var bti = TexSharp.Bti.Read(SkywardRenderingSharp.Archives.GameArchive.Get(system, path));
+        int w = bti.Width, h = bti.Height;
+        var pixels = bti.ToRgba8();
+        Console.WriteLine($"{path} {bti.Format} {w}x{h}");
+        for (int y = 0; y < h; y++) Console.WriteLine("   " + string.Join(" ", Enumerable.Range(0, w).Where(x => x % 4 == 0).Select(x => $"{pixels[(y * w + x) * 4]:x2}/{pixels[(y * w + x) * 4 + 1]:x2}/{pixels[(y * w + x) * 4 + 2]:x2}/{pixels[(y * w + x) * 4 + 3]:x2}")));
     }
     return 0;
 }
@@ -79,36 +78,11 @@ static int Info(SkywardRom rom, string id)
     var first = rom.Index.Find(id).FirstOrDefault() ?? rom.Index.InArchive(id).First();
     var package = rom.Open(first);
     Console.WriteLine($"package {first}");
-    foreach (var (name, _) in package.Bres.Models)
+    foreach (var name in package.ModelNames)
     {
         var m = Mdl0Model.Read(package.Bres, name);
         Console.WriteLine($"  {name,-24} bones={m.Bones.Count,3} meshes={m.Meshes.Count,3} first bones: {string.Join(",", m.Bones.Take(int.Parse(Environment.GetEnvironmentVariable("SKY_BONES") ?? "4")).Select(b => b.Name))}");
     }
-    return 0;
-}
-
-static int AnimCheck(SkywardRom rom)
-{
-    var library = rom.OpenAnimations("PLCommonAnime");
-    var reasons = new Dictionary<(int, string), int>(); var totals = new Dictionary<int, int>(); int unreadable = 0, shown = 0; var firsts = new Dictionary<int, List<float>>();
-    foreach (var name in library.ClipNames)
-    {
-        var clip = library.Get(name); unreadable += clip.UnreadableTracks;
-        foreach (var t in clip.KeyedTracks)
-        {
-            totals[t.Format] = totals.GetValueOrDefault(t.Format) + 1;
-            void Bad(string r) => reasons[(t.Format, r)] = reasons.GetValueOrDefault((t.Format, r)) + 1;
-            if (!t.FramesIncrease) Bad("frames not increasing");
-            if (!t.ValuesFinite) Bad("non-finite values");
-            if (t.FirstFrame < -1.01f) { Bad("first frame before -1"); { if (!firsts.ContainsKey(t.Format)) firsts[t.Format] = []; firsts[t.Format].Add(t.FirstFrame); } }
-            if (t.LastFrame > clip.FrameCount + 1.01f) { Bad("last frame beyond clip"); if (reasons[(t.Format, "last frame beyond clip")] <= 3) Console.WriteLine($"    {name} fmt{t.Format} frames={clip.FrameCount} keys={t.KeyCount} first={t.FirstFrame} last={t.LastFrame} 1/scale={1 / t.FrameScale:F1}"); }
-        }
-    }
-    foreach (var (f, n) in totals.OrderBy(p => p.Key)) Console.WriteLine($"format {f}: {n} tracks");
-    foreach (var ((f, r), n) in reasons.OrderBy(p => p.Key)) Console.WriteLine($"  format {f}: {n} x {r}");
-    foreach (var (fmt, list) in firsts) Console.WriteLine($"  first frames below -1 in format {fmt}: min {list.Min():F1} max {list.Max():F1} distinct {list.Select(x => MathF.Round(x)).Distinct().Count()} sample {string.Join(",", list.Take(8).Select(x => x.ToString("F1")))}");
-    Console.WriteLine($"{unreadable} unreadable tracks");
-    foreach (var name in library.ClipNames.Take(400)) { var c = library.Get(name); foreach (var d in c.UnreadableDetails.Take(1)) { Console.WriteLine($"  {name}: {d}"); break; } if (c.UnreadableDetails.Count > 0 && ++shown >= 8) break; }
     return 0;
 }
 
@@ -181,7 +155,7 @@ static int Textures(SkywardRom rom, string id, string path)
 {
     var file = rom.Open(rom.Index.Find(id)[0]);
     var textures = new ModelTextures(file);
-    var names = file.Bres.Textures.Select(t => t.Name).ToList();
+    var names = file.Bres["Textures(NW4R)"]?.Files.Select(t => t.Name).ToList() ?? [];
     const int cell = 150, cols = 7;
     using var bitmap = new SKBitmap(cols * cell, (names.Count + cols - 1) / cols * (cell + 14));
     using var canvas = new SKCanvas(bitmap);
@@ -209,9 +183,9 @@ static int TexCheck(SkywardRom rom)
         try { model = rom.OpenModelArchive(name); } catch (FileNotFoundException) { continue; }
         if (model.Xtx is not { } xtx) continue;
         archives++;
-        for (int i = 0; i < xtx.Count; i++)
+        foreach (var texture in xtx.Textures)
         {
-            try { xtx.Decode(i); ok++; }
+            try { texture.ToRgba8(); ok++; }
             catch (Exception e) { failed++; errors[e.Message] = errors.GetValueOrDefault(e.Message) + 1; }
         }
     }

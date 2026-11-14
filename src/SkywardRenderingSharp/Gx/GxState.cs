@@ -1,4 +1,4 @@
-using SkywardRenderingSharp.Brres;
+using System.Buffers.Binary;
 
 namespace SkywardRenderingSharp.Gx;
 
@@ -20,17 +20,17 @@ public sealed class GxState
 
     public uint Xfr(int address) => Xf.GetValueOrDefault(address);
 
-    // Executes every command in [start, end); stops at the first byte that is not a state command.
-    public int Run(BigEndian file, int start, int end)
+    // Executes every command in the stream; stops at the first byte that is not a state command.
+    public int Run(ReadOnlySpan<byte> code)
     {
-        int p = start;
-        while (p < end)
+        int p = 0;
+        while (p < code.Length)
         {
-            byte op = file.U8(p);
+            byte op = code[p];
             if (op == 0) { p++; continue; }
-            if (op == 0x61) { WriteBp(file.U8(p + 1), file.U32(p + 1) & 0xFFFFFF); p += 5; }
-            else if (op == 0x08) { Cp[file.U8(p + 1)] = file.U32(p + 2); p += 6; }
-            else if (op == 0x10) p = LoadXf(file, p);
+            if (op == 0x61) { WriteBp(code[p + 1], U32(code, p + 1) & 0xFFFFFF); p += 5; }
+            else if (op == 0x08) { Cp[code[p + 1]] = U32(code, p + 2); p += 6; }
+            else if (op == 0x10) p = LoadXf(code, p);
             else break;
         }
         return p;
@@ -45,10 +45,12 @@ public sealed class GxState
         _mask = 0xFFFFFF;
     }
 
-    int LoadXf(BigEndian file, int p)
+    int LoadXf(ReadOnlySpan<byte> code, int p)
     {
-        int count = file.U16(p + 1) + 1, address = file.U16(p + 3);
-        for (int i = 0; i < count; i++) Xf[address + i] = file.U32(p + 5 + 4 * i);
+        int count = BinaryPrimitives.ReadUInt16BigEndian(code[(p + 1)..]) + 1, address = BinaryPrimitives.ReadUInt16BigEndian(code[(p + 3)..]);
+        for (int i = 0; i < count; i++) Xf[address + i] = U32(code, p + 5 + 4 * i);
         return p + 5 + 4 * count;
     }
+
+    static uint U32(ReadOnlySpan<byte> code, int at) => BinaryPrimitives.ReadUInt32BigEndian(code[at..]);
 }

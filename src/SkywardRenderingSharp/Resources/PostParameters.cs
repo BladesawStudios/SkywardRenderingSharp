@@ -1,6 +1,7 @@
-using System.Buffers.Binary;
 using System.Numerics;
+using RevolutionEggSharp;
 using SkywardRenderingSharp.Archives;
+using U8Sharp;
 
 namespace SkywardRenderingSharp.Resources;
 
@@ -15,19 +16,15 @@ public sealed record PostParameters(float BloomThreshold, Vector3 BloomTint, Vec
     /// <summary>The mask threshold per channel, as the engine computes it: the file's threshold mapped to video range ((t * 219 + 16) / 255), times the mask colour (+0x14).</summary>
     public Vector4 BloomMaskThreshold => (BloomThreshold * 219f + 16f) / 255f * BloomMaskColor;
 
-    public static PostParameters Read(U8Archive system)
+    public static PostParameters Read(U8File system)
     {
-        var bloom = system.Get("dat/default.bblm").Span;
-        var paint = system.Get("dat/default.bdfp").Span;
-        if (!bloom[..4].SequenceEqual("PBLM"u8) || !paint[..4].SequenceEqual("BDFP"u8)) throw new InvalidDataException("Unexpected post parameter files.");
-        float F(ReadOnlySpan<byte> s, int o) => BinaryPrimitives.ReadSingleBigEndian(s[o..]);
-        uint tint = BinaryPrimitives.ReadUInt32BigEndian(bloom[0x18..]);
-        uint mask = BinaryPrimitives.ReadUInt32BigEndian(bloom[0x14..]);
-        // Layers are (radius, intensity) float pairs at 0x20, 0x40 and 0x60; the byte at 0x81 says how many are drawn (the base layer and the ones after it).
-        var layers = new List<Vector2>();
-        for (int i = 0; i < Math.Min((int)bloom[0x81], 3); i++) layers.Add(new Vector2(F(bloom, 0x20 + 0x20 * i), F(bloom, 0x24 + 0x20 * i)));
-        return new PostParameters(F(bloom, 0x10), new Vector3(tint >> 24 & 255, tint >> 16 & 255, tint >> 8 & 255) / 255f,
-            new Vector2(F(paint, 0x10), F(paint, 0x14)), new Vector2(F(paint, 0x18), F(paint, 0x1C)),
-            new Vector4(mask >> 24 & 255, mask >> 16 & 255, mask >> 8 & 255, mask & 255) / 255f, layers);
+        var bloom = new EggBloom(system.Get("dat/default.bblm"));
+        var paint = new EggPaint(system.Get("dat/default.bdfp"));
+        // Layers are (radius, intensity) pairs; Blur2StageCount says how many are drawn (the base layer and the ones after it).
+        Vector2[] stages = [new(bloom.BlurStrength, bloom.BlurIntensity), new(bloom.Blur2Stage1Strength, bloom.Blur2Stage1Intensity), new(bloom.Blur2Stage2Strength, bloom.Blur2Stage2Intensity)];
+        return new PostParameters(bloom.ThresholdIntensity, Rgba(bloom.TintColor).AsVector3(), paint.Far, paint.Near, Rgba(bloom.ThresholdColor),
+            stages.Take(Math.Min((int)bloom.Blur2StageCount, stages.Length)).ToList());
     }
+
+    static Vector4 Rgba(uint c) => new Vector4(c >> 24 & 255, c >> 16 & 255, c >> 8 & 255, c & 255) / 255f;
 }

@@ -10,7 +10,6 @@ public class AnimationTests
         foreach (string name in library.ClipNames)
         {
             var clip = library.Get(name);
-            Assert.True(clip.UnreadableTracks == 0, $"{name}: {string.Join("; ", clip.UnreadableDetails.Take(2))}");
             Assert.True(clip.FrameCount > 0, name);
             clips++;
         }

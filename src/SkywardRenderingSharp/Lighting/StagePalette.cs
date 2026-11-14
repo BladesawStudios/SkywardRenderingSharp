@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+using SkywardPaletteSharp;
 using System.Numerics;
 
 namespace SkywardRenderingSharp.Lighting;
@@ -35,43 +35,46 @@ public sealed record PaletteSlot(int Index, Vector3 KeyLight, Vector3 FillLight,
     static string Hex(Vector3 c) => $"#{(int)(c.X * 255 + 0.5f):X2}{(int)(c.Y * 255 + 0.5f):X2}{(int)(c.Z * 255 + 0.5f):X2}";
 }
 
-/// <summary>A stage's <c>palette.spf</c> (lights, sky, paint), <c>palette.sff</c> (fog) and <c>palette.eaf</c> (hemisphere ambient): twenty slots each.</summary>
-/// <remarks>Slots a stage does not use hold a default template (words 117-118 are 00fff0b4 and ff010000; <see cref="PaletteSlot.IsTemplate"/>). A stage's layers pick slots by number; the file does not say what each stands for, but the used ones differ in sky colour (blue sky, peach, pale or overcast), paint range and light layout. An spf slot is 130 big-endian words after a one word header; the words used are 1 key light, 3 ambient, 7 fill light, 14 third light, 119-122 paint distances
-/// and 128-129 sky colours. An sff slot is three (colour, near, far) fog layers. An eaf slot is 256 bytes whose first two colours are the sky and ground ambient.
+/// <summary>A stage's <c>palette.spf</c> (lights, sky, paint), <c>palette.sff</c> (fog) and <c>palette.eaf</c> (hemisphere ambient), read through SkywardPaletteSharp: twenty slots each.</summary>
+/// <remarks>Slots a stage does not use hold a default template (words 117-118 are 00fff0b4 and ff010000; <see cref="PaletteSlot.IsTemplate"/>). A stage's layers pick slots by number; the file does not say what each stands for, but the used ones differ in sky colour (blue sky, peach, pale or overcast), paint range and light layout. An spf slot is one 130-word record; the words used are 1 key light, 3 ambient, 7 fill light, 14 third light, 119-122 paint distances
+/// and 128-129 sky colours. An sff slot is three (colour, near, far) fog entries. The eaf holds 32 records of 160 bytes; how they pair with the slots is not known (most are white defaults, and their order does not follow the slots'), so the first record's first two colours, the stage's own, are the sky and ground ambient of every slot.
 /// The remaining words (shadow and rim parameters, further light sets) are not decoded. What each slot number means (time of day or weather) is not known.</remarks>
 public sealed class StagePalette
 {
     public const int Slots = 20;
-    const int SpfSlotBytes = 520, SffSlotBytes = 36, EafSlotBytes = 256, Header = 4;
+    const int FogLayers = 3;
 
-    readonly byte[] _spf, _sff, _eaf;
+    readonly PaletteFile _spf;
+    readonly PaletteFogFile _sff;
+    readonly PaletteEffectFile? _eaf;
 
-    StagePalette(byte[] spf, byte[] sff, byte[] eaf) { _spf = spf; _sff = sff; _eaf = eaf; }
+    StagePalette(PaletteFile spf, PaletteFogFile sff, PaletteEffectFile? eaf) { _spf = spf; _sff = sff; _eaf = eaf; }
 
-    public static StagePalette Open(ReadOnlySpan<byte> spf, ReadOnlySpan<byte> sff, ReadOnlySpan<byte> eaf = default)
+    // Some stages have no eaf; their hemisphere colours stay at the ambient.
+    public static StagePalette Open(byte[] spf, byte[] sff, byte[]? eaf = null)
     {
-        if (spf.Length != Header + Slots * SpfSlotBytes) throw new InvalidDataException("Not a stage palette (.spf).");
-        if (sff.Length != Header + Slots * SffSlotBytes) throw new InvalidDataException("Not a stage fog file (.sff).");
-        if (eaf.Length != 0 && eaf.Length != Slots * EafSlotBytes) throw new InvalidDataException("Not a stage environment file (.eaf).");
-        return new StagePalette(spf.ToArray(), sff.ToArray(), eaf.ToArray());   // an empty eaf (some stages have none) leaves the hemisphere colours at the ambient
+        var palette = new StagePalette(PaletteFile.FromBinary(spf), PaletteFogFile.FromBinary(sff), eaf is { Length: > 0 } ? PaletteEffectFile.FromBinary(eaf) : null);
+        if (palette._spf.Palettes.Count < Slots) throw new InvalidDataException("Not a stage palette (.spf).");
+        if (palette._sff.Entries.Count < Slots * FogLayers) throw new InvalidDataException("Not a stage fog file (.sff).");
+        return palette;
     }
 
     public PaletteSlot Slot(int index)
     {
         if (index is < 0 or >= Slots) throw new ArgumentOutOfRangeException(nameof(index));
-        int s = Header + index * SpfSlotBytes, f = Header + index * SffSlotBytes, e = index * EafSlotBytes;
-        Vector3 C(byte[] d, int at) => Rgb(BinaryPrimitives.ReadUInt32BigEndian(d.AsSpan(at)));
-        float F(byte[] d, int at) => BinaryPrimitives.ReadSingleBigEndian(d.AsSpan(at));
-        var fog = Enumerable.Range(0, 3).Select(i => new FogLayer(C(_sff, f + i * 12), F(_sff, f + i * 12 + 4), F(_sff, f + i * 12 + 8))).ToList();
+        var spf = _spf.Palettes[index];
+        Vector3 C(int word) => Rgb(spf.Color(word));
+        var fog = Enumerable.Range(0, FogLayers).Select(i => _sff.Entries[index * FogLayers + i]).Select(f => new FogLayer(Rgb(f.Color), f.Near, f.Far)).ToList();
         // Slots come in two layouts: the leading six colours (words 0-5) are lights in one and something else in the other, told apart by word 6 (0.35 or 0.3).
         // Only the first layout's key light and ambient are read from the file; the other uses a white key and the hemisphere ambient, and its leading colours are the sky instead: word 0 the zenith and word 3 the horizon
         // (a deep blue and a cyan in Skyloft's daytime slots; mixed along the dome they give the game's sky blue), where the first layout keeps its sky at words 128 and 129.
-        bool lights = MathF.Abs(F(_spf, s + 24) - 0.35f) < 1e-3f;
-        var hemisphereSky = _eaf.Length == 0 ? C(_spf, s + 12) : C(_eaf, e);
-        var hemisphereGround = _eaf.Length == 0 ? C(_spf, s + 12) : C(_eaf, e + 4);
-        return new PaletteSlot(index, lights ? C(_spf, s + 4) : Vector3.One, C(_spf, s + 28), C(_spf, s + 56), lights ? C(_spf, s + 12) : (hemisphereSky + hemisphereGround) / 2,
-            lights ? C(_spf, s + 512) : Vector3.Lerp(C(_spf, s + 0), C(_spf, s + 12), 0.4f), lights ? C(_spf, s + 516) : C(_spf, s + 12), Ordered(F(_spf, s + 476), F(_spf, s + 480)), new Vector2(F(_spf, s + 484), F(_spf, s + 488)), fog, hemisphereSky, hemisphereGround,
-            BinaryPrimitives.ReadUInt32BigEndian(_spf.AsSpan(s + 468)) == 0x00fff0b4 && BinaryPrimitives.ReadUInt32BigEndian(_spf.AsSpan(s + 472)) == 0xff010000);
+        bool lights = MathF.Abs(spf.Float(6) - 0.35f) < 1e-3f;
+        var effect = _eaf?.Records[0];
+        var hemisphereSky = effect is null ? C(3) : Rgb(effect.Color(0));
+        var hemisphereGround = effect is null ? C(3) : Rgb(effect.Color(1));
+        return new PaletteSlot(index, lights ? C(1) : Vector3.One, C(7), C(14), lights ? C(3) : (hemisphereSky + hemisphereGround) / 2,
+            lights ? C(128) : Vector3.Lerp(C(0), C(3), 0.4f), lights ? C(129) : C(3), Ordered(spf.Float(119), spf.Float(120)), new Vector2(spf.Float(121), spf.Float(122)), fog, hemisphereSky, hemisphereGround,
+            spf.UInt(117) == 0x00fff0b4 && spf.UInt(118) == 0xff010000);
     }
 
     // A far pair is stored start then end but some slots list it largest first; the ramp always runs from the smaller to the larger.

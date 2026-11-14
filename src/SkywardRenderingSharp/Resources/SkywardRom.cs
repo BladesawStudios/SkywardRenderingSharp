@@ -1,10 +1,14 @@
+using BresSharp;
+using RevolutionEggSharp;
 using SkywardRenderingSharp.Animation;
 using SkywardRenderingSharp.Archives;
-using SkywardRenderingSharp.Brres;
 using SkywardRenderingSharp.Content;
 using SkywardRenderingSharp.Lighting;
 using SkywardRenderingSharp.Shaders;
 using SkywardRenderingSharp.Textures;
+using TexSharp;
+using U8Sharp;
+using XtxSharp;
 
 namespace SkywardRenderingSharp.Resources;
 
@@ -12,11 +16,11 @@ namespace SkywardRenderingSharp.Resources;
 /// <remarks>Open it on the romfs folder (the one holding Object, Stage and Shaders).</remarks>
 public sealed class SkywardRom
 {
-    readonly U8Archive _objectPack;
+    readonly U8File _objectPack;
     readonly string _romfs;
-    readonly Dictionary<string, U8Archive> _containers = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string, U8File> _containers = new(StringComparer.OrdinalIgnoreCase);
     ContentIndex? _index;
-    U8Archive? _palettes;
+    U8File? _palettes;
 
     public LightFile Lights { get; }
     public LightmapFile Lightmaps { get; }
@@ -26,9 +30,9 @@ public sealed class SkywardRom
     public PostParameters Post { get; }
     public DofParameters CutsceneDof { get; }
 
-    SkywardRom(string romfs, U8Archive objectPack, U8Archive systemArchive, ReadOnlyMemory<byte> systemModel, LightFile lights, LightmapFile lightmaps, PostParameters post, DofParameters dof)
+    SkywardRom(string romfs, U8File objectPack, U8File systemArchive, byte[] systemModel, LightFile lights, LightmapFile lightmaps, PostParameters post, DofParameters dof)
     {
-        _romfs = romfs; _objectPack = objectPack; SystemTextures = new ModelTextures(new ModelArchive(new BresFile(systemModel), null), null, GradientRamps(systemArchive, lightmaps)); Lights = lights; Lightmaps = lightmaps; Post = post; CutsceneDof = dof;
+        _romfs = romfs; _objectPack = objectPack; SystemTextures = new ModelTextures(new ModelArchive(BresFile.FromBinary(systemModel), null), null, GradientRamps(systemArchive, lightmaps)); Lights = lights; Lightmaps = lightmaps; Post = post; CutsceneDof = dof;
     }
 
     /// <summary>One of the game's compiled post-processing programs (<c>Shaders/custom</c>), such as <c>BloomMask_Custom</c>.</summary>
@@ -37,15 +41,15 @@ public sealed class SkywardRom
     public static SkywardRom Open(string romfs)
     {
         string nx = Path.Combine(romfs, "Object", "NX");
-        var pack = U8Archive.OpenFile(Path.Combine(nx, "ObjectPack.arc.LZ"));
-        var system = U8Archive.OpenFile(Path.Combine(nx, "System.arc"));
-        return new SkywardRom(romfs, pack, system, system.Get("g3d/model.brres"), LightFile.Open(system.Get("dat/default.blight").Span), LightmapFile.Open(system.Get("dat/default.blmap").Span),
-            PostParameters.Read(system), DofParameters.Read(system.Get("dat/opning.bdof").Span));
+        var pack = GameArchive.OpenFile(Path.Combine(nx, "ObjectPack.arc.LZ"));
+        var system = GameArchive.OpenFile(Path.Combine(nx, "System.arc"));
+        return new SkywardRom(romfs, pack, system, system.Get("g3d/model.brres"), new LightFile(new EggLight(system.Get("dat/default.blight"))),
+            new LightmapFile(new EggLightMap(system.Get("dat/default.blmap"))), PostParameters.Read(system), DofParameters.Read(new EggDepthOfField(system.Get("dat/opning.bdof"))));
     }
 
     // The engine loads the Gra* gradients (System.arc tex/*.bti, 64x4, identical rows) into GPU slots 10 to 17 at start-up (0xdf1ef4) and binds them in place of models' Lm* textures.
     // Each gradient is scaled by its .blmap curve (128 samples across the ramp): the shared curves are 1.0 apart from a few samples at the left edge, so this barely changes them.
-    static Dictionary<string, RgbaImage> GradientRamps(U8Archive system, LightmapFile lightmaps)
+    static Dictionary<string, RgbaImage> GradientRamps(U8File system, LightmapFile lightmaps)
     {
         var map = new Dictionary<string, string>
         {
@@ -55,8 +59,8 @@ public sealed class SkywardRom
         var result = new Dictionary<string, RgbaImage>();
         foreach (var (lightmap, gradient) in map)
         {
-            var d = system.Get($"tex/{gradient}.bti").Span;
-            var image = WiiTexture.Decode(d[32..], d[2] << 8 | d[3], d[4] << 8 | d[5], (WiiTexture.Format)d[0]);
+            var bti = Bti.Read(system.Get($"tex/{gradient}.bti"));
+            var image = new RgbaImage(bti.Width, bti.Height, bti.ToRgba8());
             if (lightmaps.Names.Contains(lightmap)) ApplyCurve(image, lightmaps.Curve(lightmap));
             if (lightmap.EndsWith("Add", StringComparison.Ordinal)) ScaleColor(image, AddRampGain);
             result[lightmap] = image;
@@ -84,12 +88,12 @@ public sealed class SkywardRom
             }
     }
 
-    public IEnumerable<string> ModelArchives => _objectPack.Paths.Where(p => p.StartsWith("oarc/", StringComparison.Ordinal) && p.EndsWith(".arc", StringComparison.Ordinal))
+    public IEnumerable<string> ModelArchives => _objectPack.Paths().Where(p => p.StartsWith("oarc/", StringComparison.Ordinal) && p.EndsWith(".arc", StringComparison.Ordinal))
         .Select(p => Path.GetFileNameWithoutExtension(p));
 
     /// <summary>Opens an animation library archive such as PLCommonAnime (Link's clips).</summary>
     public AnimationLibrary OpenAnimations(string name) =>
-        new(U8Archive.Open(_objectPack.Get($"oarc/{name}.arc").ToArray()).Get("g3d/model.brres"));
+        new(GameArchive.Open(_objectPack.Get($"oarc/{name}.arc")).Get("g3d/model.brres"));
 
     /// <summary>The index of every model in the romfs. The first call builds it (a minute or so) and caches it on disk.</summary>
     public ContentIndex Index => _index ??= ContentIndex.Open(_romfs);
@@ -98,17 +102,16 @@ public sealed class SkywardRom
     public ModelArchive Open(ModelLocation location)
     {
         var archive = Container(location.Container);
-        foreach (string step in location.Chain) archive = U8Archive.Open(archive.Get(step).ToArray());
-        var xtx = archive.TryGet(location.XtxPath, out var data) ? XtxFile.Open(data.Span) : null;
-        return new ModelArchive(new BresFile(archive.Get(location.BresPath)), xtx);
+        foreach (string step in location.Chain) archive = GameArchive.Open(archive.Get(step));
+        return ModelArchive.Read(archive, location.BresPath, location.XtxPath);
     }
 
     // The last few decompressed containers are kept: a stage archive is tens of megabytes to decompress.
-    U8Archive Container(string path)
+    U8File Container(string path)
     {
         if (_containers.TryGetValue(path, out var cached)) return cached;
         if (_containers.Count >= 3) _containers.Remove(_containers.Keys.First());
-        return _containers[path] = path.EndsWith("ObjectPack.arc.LZ", StringComparison.OrdinalIgnoreCase) ? _objectPack : U8Archive.OpenFile(Path.Combine(_romfs, path));
+        return _containers[path] = path.EndsWith("ObjectPack.arc.LZ", StringComparison.OrdinalIgnoreCase) ? _objectPack : GameArchive.OpenFile(Path.Combine(_romfs, path));
     }
 
     /// <summary>Opens a stage's first archive: its shared prop models and textures, its rooms and its object archives.</summary>
@@ -120,48 +123,49 @@ public sealed class SkywardRom
     }
 
     /// <summary>The stage palettes the game ships (object pack's Palette_Test archive): one per stage, plus variants such as F000sasaki. Palettes without a fog file are left out.</summary>
-    public IEnumerable<string> PaletteNames => PaletteArchive.Paths.Where(p => p.EndsWith(".spf", StringComparison.Ordinal) && PaletteArchive.TryGet(Path.ChangeExtension(p, ".sff"), out _))
+    public IEnumerable<string> PaletteNames => PaletteArchive.Paths().Where(p => p.EndsWith(".spf", StringComparison.Ordinal) && PaletteArchive.TryGet(Path.ChangeExtension(p, ".sff"), out _))
         .Select(p => Path.GetFileNameWithoutExtension(p)).Order(StringComparer.Ordinal);
 
-    public StagePalette OpenPalette(string name) => StagePalette.Open(PaletteArchive.Get($"palette/{name}.spf").Span, PaletteArchive.Get($"palette/{name}.sff").Span,
-        PaletteArchive.TryGet($"palette/{name}.eaf", out var eaf) ? eaf.Span : default);
+    public StagePalette OpenPalette(string name) => StagePalette.Open(PaletteArchive.Get($"palette/{name}.spf"), PaletteArchive.Get($"palette/{name}.sff"),
+        PaletteArchive.TryGet($"palette/{name}.eaf", out var eaf) ? eaf.Data : null);
 
-    U8Archive PaletteArchive => _palettes ??= U8Archive.OpenFile(Path.Combine(_romfs, "Object", "NX", "Palette_Test.arc"));
+    U8File PaletteArchive => _palettes ??= GameArchive.OpenFile(Path.Combine(_romfs, "Object", "NX", "Palette_Test.arc"));
 
     /// <summary>Opens one object's model file (BRRES) and its external texture container, if it has one.</summary>
     public ModelArchive OpenModelArchive(string name)
     {
-        var archive = U8Archive.Open(_objectPack.Get($"oarc/{name}.arc").ToArray());
-        var xtx = archive.TryGet("g3d/model.xtx", out var data) ? XtxFile.Open(data.Span) : null;
-        return new ModelArchive(new BresFile(archive.Get("g3d/model.brres")), xtx);
+        return ModelArchive.Read(GameArchive.Open(_objectPack.Get($"oarc/{name}.arc")), "g3d/model.brres", "g3d/model.xtx");
     }
 }
 
-/// <summary>A model file and the .xtx its textures live in: stub TEX0 entries take their pixels from the .xtx in order.</summary>
-public sealed record ModelArchive(BresFile Bres, XtxFile? Xtx);
+/// <summary>A model file and the .xtx its textures live in: TEX0 entries marked for it take their pixels from the .xtx in order.</summary>
+public sealed record ModelArchive(BresFile Bres, XtxFile? Xtx)
+{
+    public IEnumerable<string> ModelNames => Bres["3DModels(NW4R)"]?.Files.Select(f => f.Name) ?? [];
+
+    public static ModelArchive Read(U8File archive, string bres, string xtx) =>
+        new(BresFile.FromBinary(archive.Get(bres)), archive.TryGet(xtx, out var data) ? XtxFile.FromBinary(data.Data) : null);
+}
 
 /// <summary>A stage's main archive: g3d/stage.brres (props and the texture pool every room shares), rarc/*_rNN.arc rooms and oarc/*.arc objects such as the sky.</summary>
 public sealed class StageArchive
 {
-    readonly U8Archive _archive;
+    readonly U8File _archive;
 
     public string Name { get; }
     public string Container { get; }
 
-    internal StageArchive(string name, string container, U8Archive archive) { Name = name; Container = container; _archive = archive; }
+    internal StageArchive(string name, string container, U8File archive) { Name = name; Container = container; _archive = archive; }
 
-    public ModelArchive Props => Read(_archive, "g3d/stage.brres", "g3d/stage.xtx");
+    public ModelArchive Props => ModelArchive.Read(_archive, "g3d/stage.brres", "g3d/stage.xtx");
 
-    public IEnumerable<string> Rooms => _archive.Paths.Where(p => p.StartsWith("rarc/", StringComparison.Ordinal) && p.EndsWith(".arc", StringComparison.Ordinal))
+    public IEnumerable<string> Rooms => _archive.Paths().Where(p => p.StartsWith("rarc/", StringComparison.Ordinal) && p.EndsWith(".arc", StringComparison.Ordinal))
         .Select(p => Path.GetFileNameWithoutExtension(p)).Order();
 
-    public ModelArchive Room(string room) => Read(U8Archive.Open(_archive.Get($"rarc/{room}.arc").ToArray()), "g3d/room.brres", "g3d/room.xtx");
+    public ModelArchive Room(string room) => ModelArchive.Read(GameArchive.Open(_archive.Get($"rarc/{room}.arc")), "g3d/room.brres", "g3d/room.xtx");
 
-    public IEnumerable<string> Objects => _archive.Paths.Where(p => p.StartsWith("oarc/", StringComparison.Ordinal) && p.EndsWith(".arc", StringComparison.Ordinal))
+    public IEnumerable<string> Objects => _archive.Paths().Where(p => p.StartsWith("oarc/", StringComparison.Ordinal) && p.EndsWith(".arc", StringComparison.Ordinal))
         .Select(p => Path.GetFileNameWithoutExtension(p)).Order();
 
-    public ModelArchive Object(string name) => Read(U8Archive.Open(_archive.Get($"oarc/{name}.arc").ToArray()), "g3d/model.brres", "g3d/model.xtx");
-
-    static ModelArchive Read(U8Archive archive, string bres, string xtx) =>
-        new(new BresFile(archive.Get(bres)), archive.TryGet(xtx, out var data) ? XtxFile.Open(data.Span) : null);
+    public ModelArchive Object(string name) => ModelArchive.Read(GameArchive.Open(_archive.Get($"oarc/{name}.arc")), "g3d/model.brres", "g3d/model.xtx");
 }

@@ -9,12 +9,18 @@
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Renders Skyward Sword HD models with a GX uber shader and the game's painterly post-processing.</Description>
-    <!-- ShaderLibrary (Ryujinx's Maxwell translator) is a submodule in lib. A checkout of several libraries side by side sets SrsLibRoot so they share one. -->
-    <SrsLibRoot Condition="'$(SrsLibRoot)' == ''">$(MSBuildThisFileDirectory)..\..\lib</SrsLibRoot>
     <RyujinxLibs>$(SrsLibRoot)\ShaderLibrary\ShaderLibrary.CompileTool\Libs</RyujinxLibs>
   </PropertyGroup>
 
+  <!-- The libraries are submodules in lib (SrsLibRoot, set in Directory.Build.props): the game's formats, and Ryujinx's Maxwell translator from ShaderLibrary. -->
   <ItemGroup>
+    <ProjectReference Include="$(SrsLibRoot)\LzSharp\src\LzSharp\LzSharp.csproj" />
+    <ProjectReference Include="$(SrsLibRoot)\U8Sharp\src\U8Sharp\U8Sharp.csproj" />
+    <ProjectReference Include="$(SrsLibRoot)\BresSharp\src\BresSharp\BresSharp.csproj" />
+    <ProjectReference Include="$(SrsLibRoot)\XtxSharp\src\XtxSharp\XtxSharp.csproj" />
+    <ProjectReference Include="$(SrsLibRoot)\TexSharp\src\TexSharp\TexSharp.csproj" />
+    <ProjectReference Include="$(SrsLibRoot)\RevolutionEggSharp\src\RevolutionEggSharp\RevolutionEggSharp.csproj" />
+    <ProjectReference Include="$(SrsLibRoot)\SkywardPaletteSharp\src\SkywardPaletteSharp\SkywardPaletteSharp.csproj" />
     <Reference Include="Ryujinx.Common" HintPath="$(RyujinxLibs)\Ryujinx.Common.dll" />
     <Reference Include="Ryujinx.Graphics.Shader" HintPath="$(RyujinxLibs)\Ryujinx.Graphics.Shader.dll" />
     <Reference Include="Spv.Generator" HintPath="$(RyujinxLibs)\Spv.Generator.dll" />
@@ -22,7 +28,6 @@
 
   <ItemGroup>
     <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
-    <PackageReference Include="AstcSharp" Version="3.1.0" />
   </ItemGroup>
 
   <ItemGroup>

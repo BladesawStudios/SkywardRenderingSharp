@@ -1,10 +1,13 @@
-using SkywardRenderingSharp.Brres;
+using BresSharp;
 using SkywardRenderingSharp.Textures;
+using TexSharp;
+using XtxSharp;
 
 namespace SkywardRenderingSharp.Resources;
 
-/// <summary>Resolves a model's texture names to decoded images: .xtx for the 1x1 stubs, Wii formats for inline ones, flat defaults for lightmaps.</summary>
-/// <remarks>The LmCha*, LmBG* lightmaps are built by the engine from .blmap records whose layout is not decoded; see the TODO in <see cref="Find"/>.</remarks>
+/// <summary>Resolves a model's texture names to decoded images: the .xtx textures the BRRES hands over, its own Wii-format TEX0s, and flat defaults for lightmaps.</summary>
+/// <remarks>A TEX0 whose word at 0x34 is set takes the next .xtx texture, in the BRRES's texture order (BresSharp's <c>XtxTextureSlots</c>); the rest decode from
+/// their GX data. The LmCha*, LmBG* lightmaps are built by the engine from .blmap records whose layout is not decoded; see the TODO in <see cref="Find"/>.</remarks>
 public sealed class ModelTextures
 {
     readonly Dictionary<string, Lazy<RgbaImage>> _images = new(StringComparer.Ordinal);
@@ -15,21 +18,16 @@ public sealed class ModelTextures
     public ModelTextures(ModelArchive archive, ModelTextures? fallback = null, IReadOnlyDictionary<string, RgbaImage>? replacements = null)
     {
         _fallback = fallback;
-        var f = archive.Bres.Data;
-        int xtxIndex = 0;
-        foreach (var (name, offset) in archive.Bres.Textures)
+        var slots = archive.Bres.XtxTextureSlots;
+        for (int i = 0; i < slots.Count && archive.Xtx is { } xtx && i < xtx.Textures.Count; i++)
         {
-            int width = f.U16(offset + 0x1C), height = f.U16(offset + 0x1E);
-            if (width == 1 && height == 1 && archive.Xtx is { } xtx)
-            {
-                int index = xtxIndex++;
-                _images[name] = new Lazy<RgbaImage>(() => xtx.Decode(index));
-            }
-            else
-            {
-                int at = offset;
-                _images[name] = new Lazy<RgbaImage>(() => WiiTexture.Decode(f.Span[(at + (int)f.U32(at + 0x10))..], width, height, (WiiTexture.Format)f.I32(at + 0x20)));
-            }
+            XtxTexture texture = xtx.Textures[i];
+            _images[slots[i].Name] = new Lazy<RgbaImage>(() => new RgbaImage((int)texture.Width, (int)texture.Height, texture.ToRgba8()));
+        }
+        foreach (var file in archive.Bres["Textures(NW4R)"]?.Files.Where(f => !f.UsesXtx) ?? [])
+        {
+            var tex0 = new Tex0Texture(file);
+            _images[file.Name] = new Lazy<RgbaImage>(() => new RgbaImage(tex0.Width, tex0.Height, GxTexture.ToRgba8((GxFormat)tex0.GxFormat, tex0.Data, tex0.Width, tex0.Height)));
         }
         // The engine binds its Gra* gradient textures in place of the Lm* placeholders models carry (see SkywardRom.GradientRamps).
         if (replacements is not null) foreach (var (name, image) in replacements) _images[name] = new Lazy<RgbaImage>(image);

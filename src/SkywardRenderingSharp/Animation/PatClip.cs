@@ -1,41 +1,31 @@
-using SkywardRenderingSharp.Brres;
+using BresSharp;
+using BresSharp.Anim;
 
 namespace SkywardRenderingSharp.Animation;
 
-/// <summary>A texture pattern animation (PAT0): per material, which of the clip's textures is shown at each frame.</summary>
+/// <summary>A texture pattern animation (PAT0): per material, which of the clip's textures is shown at each frame, read through BresSharp.</summary>
 /// <remarks>This is how Link's eyes blink and change expression: the eye materials swap between the al_eye.N textures. Only the first
 /// texture slot of each material is animated, which is all the face clips use.</remarks>
 public sealed class PatClip
 {
-    readonly Dictionary<string, (float Frame, int Texture)[]> _materials = new(StringComparer.Ordinal);
-    readonly string[] _textures;
+    readonly Pat0Animation _animation;
 
-    public string Name { get; }
-    public int FrameCount { get; }
+    public string Name => _animation.Name;
+    public int FrameCount => _animation.FrameCount;
 
-    PatClip(string name, int frames, string[] textures) { Name = name; FrameCount = frames; _textures = textures; }
+    PatClip(Pat0Animation animation) { _animation = animation; }
 
-    public static PatClip Read(BigEndian f, string name, int pat0)
-    {
-        int textureTable = pat0 + (int)f.U32(pat0 + 0x14);
-        int textureCount = f.U16(pat0 + 0x34);
-        var textures = Enumerable.Range(0, textureCount).Select(i => f.CString(textureTable + (int)f.U32(textureTable + 4 * i))).ToArray();
-        var clip = new PatClip(name, f.U16(pat0 + 0x30), textures);
-        foreach (var (material, record) in ResDict.Read(f, pat0 + (int)f.U32(pat0 + 0x10))) clip._materials[material] = ReadKeys(f, record + (int)f.U32(record + 8));
-        return clip;
-    }
-
-    static (float, int)[] ReadKeys(BigEndian f, int list) =>
-        Enumerable.Range(0, f.U16(list)).Select(i => (f.F32(list + 8 + 8 * i), f.U16(list + 12 + 8 * i))).ToArray();
+    public static PatClip Read(BresSubfile pat0) => new(new Pat0Animation(pat0));
 
     /// <summary>For each animated material, the texture name shown at the frame (a key holds until the next).</summary>
     public IReadOnlyDictionary<string, string> Evaluate(float frame)
     {
         var result = new Dictionary<string, string>();
-        foreach (var (material, keys) in _materials)
+        foreach (var material in _animation.Materials)
         {
-            int texture = keys.Length == 0 ? 0 : keys.LastOrDefault(k => k.Frame <= frame, keys[0]).Texture;
-            if (texture < _textures.Length) result[material] = _textures[texture];
+            if (material.Slots.FirstOrDefault() is not { HasTexture: true } slot) continue;
+            int texture = slot.At(frame).Texture;
+            if (texture >= 0 && texture < _animation.TextureNames.Count) result[material.Name] = _animation.TextureNames[texture];
         }
         return result;
     }

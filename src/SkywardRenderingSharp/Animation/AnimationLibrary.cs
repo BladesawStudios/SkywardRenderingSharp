@@ -1,5 +1,5 @@
-using SkywardRenderingSharp.Archives;
-using SkywardRenderingSharp.Brres;
+using BresSharp;
+using LzSharp;
 
 namespace SkywardRenderingSharp.Animation;
 
@@ -7,51 +7,37 @@ namespace SkywardRenderingSharp.Animation;
 /// <remarks>Clips are decompressed and parsed on first request.</remarks>
 public sealed class AnimationLibrary
 {
-    readonly BresFile _bres;
-    readonly Dictionary<string, int> _offsets = new(StringComparer.Ordinal), _patternOffsets = new(StringComparer.Ordinal), _srtOffsets = new(StringComparer.Ordinal);
+    readonly Dictionary<string, BresSubfile> _clipFiles = new(StringComparer.Ordinal), _patternFiles = new(StringComparer.Ordinal), _srtFiles = new(StringComparer.Ordinal);
     readonly Dictionary<string, ChrClip> _clips = new(StringComparer.Ordinal);
     readonly Dictionary<string, PatClip> _patterns = new(StringComparer.Ordinal);
     readonly Dictionary<string, SrtClip> _srt = new(StringComparer.Ordinal);
 
-    public AnimationLibrary(ReadOnlyMemory<byte> brres)
+    public AnimationLibrary(byte[] brres)
     {
-        _bres = new BresFile(brres);
-        foreach (var (name, offset) in _bres.Groups["External"])
+        foreach (var file in BresFile.FromBinary(brres)["External"]?.Files ?? [])
         {
-            if (name.EndsWith(".rchaC", StringComparison.Ordinal)) _offsets[name[..^6]] = offset;
-            else if (name.EndsWith(".rtpaC", StringComparison.Ordinal)) _patternOffsets[name[..^6]] = offset;
-            else if (name.EndsWith(".rtsaC", StringComparison.Ordinal)) _srtOffsets[name[..^6]] = offset;
+            if (file.Name.EndsWith(".rchaC", StringComparison.Ordinal)) _clipFiles[file.Name[..^6]] = file;
+            else if (file.Name.EndsWith(".rtpaC", StringComparison.Ordinal)) _patternFiles[file.Name[..^6]] = file;
+            else if (file.Name.EndsWith(".rtsaC", StringComparison.Ordinal)) _srtFiles[file.Name[..^6]] = file;
         }
     }
 
-    public IEnumerable<string> ClipNames => _offsets.Keys;
-    public IEnumerable<string> PatternNames => _patternOffsets.Keys;
-    public IEnumerable<string> SrtNames => _srtOffsets.Keys;
+    public IEnumerable<string> ClipNames => _clipFiles.Keys;
+    public IEnumerable<string> PatternNames => _patternFiles.Keys;
+    public IEnumerable<string> SrtNames => _srtFiles.Keys;
 
-    public ChrClip Get(string name)
-    {
-        if (_clips.TryGetValue(name, out var cached)) return cached;
-        if (!_offsets.TryGetValue(name, out int offset)) throw new KeyNotFoundException($"No animation '{name}'.");
-        var clipFile = new BresFile(Lz11.Decompress(_bres.Data.Span[offset..]));
-        var (clipName, chr0) = clipFile.Groups.First(g => g.Key.StartsWith("AnmChr", StringComparison.Ordinal)).Value[0];
-        return _clips[name] = ChrClip.Read(clipFile.Data, clipName, chr0);
-    }
+    public ChrClip Get(string name) => Cached(_clips, _clipFiles, name, "AnmChr(NW4R)", ChrClip.Read);
 
-    public PatClip GetPattern(string name)
-    {
-        if (_patterns.TryGetValue(name, out var cached)) return cached;
-        if (!_patternOffsets.TryGetValue(name, out int offset)) throw new KeyNotFoundException($"No texture pattern '{name}'.");
-        var file = new BresFile(Lz11.Decompress(_bres.Data.Span[offset..]));
-        var (patName, pat0) = file.Groups.First(g => g.Key.StartsWith("AnmTexPat", StringComparison.Ordinal)).Value[0];
-        return _patterns[name] = PatClip.Read(file.Data, patName, pat0);
-    }
+    public PatClip GetPattern(string name) => Cached(_patterns, _patternFiles, name, "AnmTexPat(NW4R)", PatClip.Read);
 
-    public SrtClip GetSrt(string name)
+    public SrtClip GetSrt(string name) => Cached(_srt, _srtFiles, name, "AnmTexSrt(NW4R)", SrtClip.Read);
+
+    // An External entry is a compressed BRRES holding the one clip.
+    static T Cached<T>(Dictionary<string, T> cache, Dictionary<string, BresSubfile> files, string name, string folder, Func<BresSubfile, T> read)
     {
-        if (_srt.TryGetValue(name, out var cached)) return cached;
-        if (!_srtOffsets.TryGetValue(name, out int offset)) throw new KeyNotFoundException($"No texture SRT animation '{name}'.");
-        var file = new BresFile(Lz11.Decompress(_bres.Data.Span[offset..]));
-        var (srtName, srt0) = file.Groups.First(g => g.Key.StartsWith("AnmTexSrt", StringComparison.Ordinal)).Value[0];
-        return _srt[name] = SrtClip.Read(file.Data, srtName, srt0);
+        if (cache.TryGetValue(name, out var cached)) return cached;
+        if (!files.TryGetValue(name, out var file)) throw new KeyNotFoundException($"No animation '{name}'.");
+        var clip = BresFile.FromBinary(Lz.Decompress(file.Data))[folder]?.Files.FirstOrDefault() ?? throw new InvalidDataException($"'{name}' holds no {folder} clip.");
+        return cache[name] = read(clip);
     }
 }

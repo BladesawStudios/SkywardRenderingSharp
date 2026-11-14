@@ -53,7 +53,7 @@ static IEnumerable<(string Name, byte[] Data)> Programs(string input)
         archive = unpacked.ToArray();
     }
     // Shaders.arc keeps the programs in cache/ and, under the same names, the material descriptions they were built for in desccache/.
-    U8Archive u8 = U8Archive.Open(archive);
-    foreach (string path in u8.Paths.Where(p => p.StartsWith("cache/", StringComparison.OrdinalIgnoreCase)).Order())
-        yield return (Path.GetFileName(path), u8.Get(path).ToArray());
+    var u8 = GameArchive.Open(archive);
+    foreach (string path in u8.Paths().Where(p => p.StartsWith("cache/", StringComparison.OrdinalIgnoreCase)).Order())
+        yield return (Path.GetFileName(path), u8.Get(path));
 }

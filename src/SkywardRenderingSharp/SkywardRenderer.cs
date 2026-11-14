@@ -27,6 +27,7 @@ public sealed class SkywardRenderer : IDisposable
     public SkywardRenderer(GL gl, SkywardRom rom)
     {
         _gl = gl; _rom = rom;
+        using var host = GlHostState.Enter(gl);
         _samplers = new SamplerCache(gl);
         _drawer = new ModelDrawer(gl, _samplers);
         _post = new PostChain(gl, rom);
@@ -61,12 +62,13 @@ public sealed class SkywardRenderer : IDisposable
     /// Models in the same file whose bones hang from the main model's joints attach to it.</summary>
     public SceneObject LoadObject(string id)
     {
+        using var host = GlHostState.Enter(_gl);
         var locations = _rom.Index.Find(id);
         bool isModel = locations.Count > 0;
         var group = (isModel ? locations : _rom.Index.InArchive(id).ToList()) switch { { Count: 0 } => throw new KeyNotFoundException($"No model or archive '{id}'."), var l => l };
         var first = group[0];
         var package = _rom.Open(first);
-        var names = package.Bres.Models.Select(m => m.Name).ToList();
+        var names = package.ModelNames.ToList();
         var loaded = names.ToDictionary(n => n, n => new LoadedModel(_gl, Mdl0Model.Read(package.Bres, n), Textures(package)));
         string main = isModel ? id : names.OrderByDescending(n => loaded[n].Model.Bones.Count).First();
         main = names.First(n => n.Equals(main, StringComparison.OrdinalIgnoreCase));
@@ -90,12 +92,13 @@ public sealed class SkywardRenderer : IDisposable
         {
             var file = _rom.Open(l);
             var textures = Textures(file);
-            return file.Bres.Models.Select(m => new LoadedModel(_gl, Mdl0Model.Read(file.Bres, m.Name), textures));
+            return file.ModelNames.Select(m => new LoadedModel(_gl, Mdl0Model.Read(file.Bres, m), textures));
         }).ToList();
 
     /// <summary>Loads a stage by ID ("F000" is Skyloft): one room of its geometry, the cloud objects, and a sky box when it has one.</summary>
     public StageScene LoadStage(string stage, string? room = null)
     {
+        using var host = GlHostState.Enter(_gl);
         var archive = _rom.OpenStage(stage);
         // SkyCmn is the object pack's shared texture package: the distant-view (WK2) island textures and the sky and cloud layers.
         var common = Textures(_rom.OpenModelArchive("SkyCmn"));
@@ -104,8 +107,8 @@ public sealed class SkywardRenderer : IDisposable
         var roomFile = archive.Room(roomName);
         var roomTextures = Textures(roomFile, pool);
         // "model0_s" is the room's shadow-pass twin of "model0"; only the visible one is drawn.
-        var roomModels = roomFile.Bres.Models.Where(m => !m.Name.EndsWith("_s", StringComparison.Ordinal))
-            .Select(m => new LoadedModel(_gl, Mdl0Model.Read(roomFile.Bres, m.Name), roomTextures)).ToList();
+        var roomModels = roomFile.ModelNames.Where(m => !m.EndsWith("_s", StringComparison.Ordinal))
+            .Select(m => new LoadedModel(_gl, Mdl0Model.Read(roomFile.Bres, m), roomTextures)).ToList();
         return new StageScene(stage, roomName, roomModels, ObjectModels(archive, "Cloud", common), ObjectModels(archive, "Vrbox", common).Take(1).ToList(),
             LightRig.FromBlight(_rom.Lights, 0, 0.4f, 1.2f));
     }
@@ -113,10 +116,11 @@ public sealed class SkywardRenderer : IDisposable
     /// <summary>Loads a sky box by model name (Vrbox00, Vrbox03, ...), with the shared sky textures, so it can back any scene.</summary>
     public SkyBox LoadSkyBox(string name)
     {
+        using var host = GlHostState.Enter(_gl);
         var location = _rom.Index.Find(name) is { Count: > 0 } found ? found[0] : throw new KeyNotFoundException($"No sky box '{name}'.");
         var file = _rom.Open(location);
         var textures = Textures(file, Textures(_rom.OpenModelArchive("SkyCmn")));
-        return new SkyBox(name, file.Bres.Models.Select(m => new LoadedModel(_gl, Mdl0Model.Read(file.Bres, m.Name), textures)).ToList());
+        return new SkyBox(name, file.ModelNames.Select(m => new LoadedModel(_gl, Mdl0Model.Read(file.Bres, m), textures)).ToList());
     }
 
     /// <summary>Names of the sky boxes in the game's data.</summary>
@@ -131,13 +135,14 @@ public sealed class SkywardRenderer : IDisposable
         {
             var file = archive.Object(name);
             var textures = Textures(file, common);
-            models.AddRange(file.Bres.Models.Where(m => !m.Name.EndsWith("_s", StringComparison.Ordinal)).Select(m => new LoadedModel(_gl, Mdl0Model.Read(file.Bres, m.Name), textures)));
+            models.AddRange(file.ModelNames.Where(m => !m.EndsWith("_s", StringComparison.Ordinal)).Select(m => new LoadedModel(_gl, Mdl0Model.Read(file.Bres, m), textures)));
         }
         return models;
     }
 
     public LoadedModel LoadModel(string archive, string model)
     {
+        using var host = GlHostState.Enter(_gl);
         var file = _rom.OpenModelArchive(archive);
         return new LoadedModel(_gl, Mdl0Model.Read(file.Bres, model), Textures(file));
     }
@@ -145,6 +150,7 @@ public sealed class SkywardRenderer : IDisposable
     /// <summary>Renders the instances and returns the finished colour texture (also available as <see cref="OutputFramebuffer"/>).</summary>
     public uint Render(Camera camera, IReadOnlyList<ModelInstance> instances, int width, int height, IReadOnlyList<ModelInstance>? skyInstances = null)
     {
+        using var host = GlHostState.Enter(_gl);
         Ensure(width, height);
         _scene!.Bind();
         var sky = Settings.SkyColor;
@@ -165,11 +171,15 @@ public sealed class SkywardRenderer : IDisposable
 
     public uint OutputFramebuffer => _output?.Framebuffer ?? 0;
 
+    /// <summary>The depth of the last frame's scene (24-bit, the camera's standard OpenGL projection), for a host that composites the frame into its own.</summary>
+    public uint DepthTexture => _scene?.Depth ?? 0;
+
     /// <summary>Reads the last frame back as top-row-first RGBA8.</summary>
     public byte[] ReadPixels()
     {
         var o = _output ?? throw new InvalidOperationException("Nothing has been rendered.");
         var raw = new byte[o.Width * o.Height * 4];
+        using var host = GlHostState.Enter(_gl);
         _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, o.Framebuffer);
         _gl.ReadPixels(0, 0, (uint)o.Width, (uint)o.Height, PixelFormat.Rgba, PixelType.UnsignedByte, raw.AsSpan());
         var flipped = new byte[raw.Length];

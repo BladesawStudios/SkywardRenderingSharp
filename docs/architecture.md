@@ -1,19 +1,19 @@
 # Architecture
 
-Layers, bottom to top. Each only depends on the ones above it in this list.
+Layers, bottom to top. Each only depends on the ones above it in this list. The game's formats are read by the libraries in `lib` (submodules): LzSharp, U8Sharp,
+BresSharp, XtxSharp (with BntxSharp), TexSharp, RevolutionEggSharp and SkywardPaletteSharp; the folders here turn what they read into what the renderer draws.
 
 | Folder | Role |
 |---|---|
-| `Archives` | `Lz11` decompression and the `U8Archive` (.arc) reader. |
-| `Textures` | `XtxFile` (Tegra container, block-linear deswizzle, ASTC), `WiiTexture` (I4/I8/IA4/IA8/RGB565/RGB5A3/RGBA8/CMPR). |
-| `Brres` | Big-endian reads, resource dictionaries, `BresFile` (models and textures by name). |
+| `Archives` | `GameArchive`: a U8 archive, LZ-compressed or not (U8Sharp, LzSharp), and its files by path. |
+| `Textures` | `RgbaImage`, the decoded picture GL uploads. |
 | `Gx` | `GxState`: the BP/XF/CP register files written by GX command streams, and typed views of them (`TevStage`, `TevColors`, `TexGenInfo`, `ChannelControl`, `PixelState`). |
-| `Model` | `Mdl0Model`: bones, materials (`MaterialReader`), polygons (`MeshDecoder`, `VertexArrays`, `NodeMatrices`) and the draw list. Vertices keep bind-space positions and up to four bone influences. |
-| `Animation` | `Pose` (skin matrices), `ChrClip` (bone animation), `PatClip` (texture patterns), `KeyTrack`, `AnimationLibrary`. |
+| `Model` | `Mdl0Model`: BresSharp's MDL0 views as bones, materials (`MaterialReader` runs their GX streams), polygons (`MeshDecoder`, `NodeMatrices`) and the draw list. Vertices keep bind-space positions and up to four bone influences. |
+| `Animation` | `Pose` (skin matrices), and BresSharp's CHR0, SRT0 and PAT0 as `ChrClip`, `SrtClip` and `PatClip`; `AnimationLibrary`, `AnimationSet`. |
 | `Characters` | `LinkRig`: Link's separate models attached to one skeleton. |
 | `Shaders` | `NvProgramBinary` (the game's compiled GL programs), `MaxwellDecompiler` (Ryujinx's translator, from the ShaderLibrary submodule) and `GameGlsl` (decompiled GLSL made to compile in a 4.3 context). |
-| `Resources` | `SkywardRom` (an extracted romfs), `ModelTextures`, `PostParameters`. |
-| `Lighting` | `LightFile` (.blight light sets), `LightRig`, `LightmapFile` (.blmap curves). |
+| `Resources` | `SkywardRom` (an extracted romfs), `ModelTextures` (TEX0 through TexSharp, XTX through XtxSharp), `PostParameters`, `DofParameters` (RevolutionEggSharp). |
+| `Lighting` | `LightFile` (.blight light sets) and `LightmapFile` (.blmap curves) over RevolutionEggSharp, `StagePalette` over SkywardPaletteSharp, `LightRig`. |
 | `Gpu` | GL helpers: `GlProgram`, `GlTexture`, `GlMesh`, `RenderTarget`, `SamplerCache`. |
 | `Rendering` | `ModelDrawer` + `MaterialBinder` (the uber shader), `PixelStateApplier`, `PostChain` + `GamePostPrograms` + `DepthRamps`, `Camera`, `RenderSettings`. |
 | `Glsl` | `uber.vert/frag` and `post/*` (embedded): the vertex shader the game's post programs run with, the depth-of-field mix and the composite. |

@@ -35,6 +35,14 @@ uint texture = renderer.Render(camera, link.Instances(Matrix4x4.Identity, pose, 
 - `LightRig` - up to eight directional lights; `FromBlight` builds one of the game's 16 light sets.
 - The world is right-handed and Y-up, in the game's centimetre-scale units.
 
+## Building
+
+The game's formats are read by libraries that are submodules in `lib`:
+
+```bash
+git submodule update --init --recursive
+```
+
 ## Getting the game data
 
 The library reads an **extracted romfs**; it does not touch keys or dumps. See [docs/extracting.md](docs/extracting.md).

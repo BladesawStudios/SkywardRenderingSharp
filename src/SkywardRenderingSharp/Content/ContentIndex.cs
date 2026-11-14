@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using BresSharp;
 using SkywardRenderingSharp.Archives;
-using SkywardRenderingSharp.Brres;
+using U8Sharp;
 
 namespace SkywardRenderingSharp.Content;
 
@@ -43,7 +44,7 @@ public sealed class ContentIndex
         foreach (string container in Containers(romfs))
         {
             progress?.Invoke(container);
-            try { Scan(U8Archive.OpenFile(Path.Combine(romfs, container)), container, [], all, 0); }
+            try { Scan(GameArchive.OpenFile(Path.Combine(romfs, container)), container, [], all, 0); }
             catch (Exception e) when (e is InvalidDataException or IOException) { progress?.Invoke($"skipped {container}: {e.Message}"); }
         }
         Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
@@ -73,22 +74,22 @@ public sealed class ContentIndex
         }
     }
 
-    static void Scan(U8Archive archive, string container, string[] chain, List<ModelLocation> into, int depth)
+    static void Scan(U8File archive, string container, string[] chain, List<ModelLocation> into, int depth)
     {
-        foreach (string path in archive.Paths)
+        foreach (string path in archive.Paths())
         {
             if (path.EndsWith(".brres", StringComparison.OrdinalIgnoreCase) && path.StartsWith("g3d/", StringComparison.OrdinalIgnoreCase)) AddModels(archive, path, container, chain, into);
             else if (depth < MaxDepth && path.EndsWith(".arc", StringComparison.OrdinalIgnoreCase) && (path.StartsWith("oarc/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("rarc/", StringComparison.OrdinalIgnoreCase)))
             {
-                try { Scan(U8Archive.Open(archive.Get(path).ToArray()), container, [.. chain, path], into, depth + 1); }
+                try { Scan(GameArchive.Open(archive.Get(path)), container, [.. chain, path], into, depth + 1); }
                 catch (InvalidDataException) { }
             }
         }
     }
 
-    static void AddModels(U8Archive archive, string path, string container, string[] chain, List<ModelLocation> into)
+    static void AddModels(U8File archive, string path, string container, string[] chain, List<ModelLocation> into)
     {
-        try { foreach (var (name, _) in new BresFile(archive.Get(path)).Models) into.Add(new ModelLocation(name, container, chain, path)); }
+        try { foreach (var model in BresFile.FromBinary(archive.Get(path))["3DModels(NW4R)"]?.Files ?? []) into.Add(new ModelLocation(model.Name, container, chain, path)); }
         catch (InvalidDataException) { }
     }
 
