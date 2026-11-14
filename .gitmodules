@@ -1,0 +1,3 @@
+[submodule "lib/ShaderLibrary"]
+	path = lib/ShaderLibrary
+	url = https://github.com/BladesawStudios/ShaderLibrary.git

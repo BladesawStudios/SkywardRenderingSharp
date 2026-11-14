@@ -15,19 +15,21 @@ public sealed class GlProgram : IDisposable
 
     GlProgram(GL gl, uint handle) { _gl = gl; Handle = handle; }
 
-    public static GlProgram FromResources(GL gl, string vertex, string fragment)
+    public static GlProgram FromResources(GL gl, string vertex, string fragment) => FromSources(gl, Load(vertex), Load(fragment), $"{vertex} + {fragment}");
+
+    public static GlProgram FromSources(GL gl, string vertexSource, string fragmentSource, string label)
     {
-        uint vs = Compile(gl, ShaderType.VertexShader, Load(vertex)), fs = Compile(gl, ShaderType.FragmentShader, Load(fragment));
+        uint vs = Compile(gl, ShaderType.VertexShader, vertexSource, label), fs = Compile(gl, ShaderType.FragmentShader, fragmentSource, label);
         uint program = gl.CreateProgram();
         gl.AttachShader(program, vs); gl.AttachShader(program, fs);
         gl.LinkProgram(program);
         gl.GetProgram(program, ProgramPropertyARB.LinkStatus, out int ok);
-        if (ok == 0) throw new InvalidOperationException($"Linking {vertex} + {fragment} failed: {gl.GetProgramInfoLog(program)}");
+        if (ok == 0) throw new InvalidOperationException($"Linking {label} failed: {gl.GetProgramInfoLog(program)}");
         gl.DeleteShader(vs); gl.DeleteShader(fs);
         return new GlProgram(gl, program);
     }
 
-    static string Load(string name)
+    public static string Load(string name)
     {
         var assembly = Assembly.GetExecutingAssembly();
         // MSBuild writes subfolders into resource names with the platform separator.
@@ -37,13 +39,13 @@ public sealed class GlProgram : IDisposable
         return reader.ReadToEnd();
     }
 
-    static uint Compile(GL gl, ShaderType type, string source)
+    static uint Compile(GL gl, ShaderType type, string source, string label)
     {
         uint shader = gl.CreateShader(type);
         gl.ShaderSource(shader, source);
         gl.CompileShader(shader);
         gl.GetShader(shader, ShaderParameterName.CompileStatus, out int ok);
-        if (ok == 0) throw new InvalidOperationException($"{type} failed to compile: {gl.GetShaderInfoLog(shader)}");
+        if (ok == 0) throw new InvalidOperationException($"{type} of {label} failed to compile: {gl.GetShaderInfoLog(shader)}");
         return shader;
     }
 

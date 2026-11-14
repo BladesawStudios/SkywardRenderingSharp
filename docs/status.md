@@ -198,6 +198,41 @@ term, `0.34 + 0.6 * rim^2` with `rim = 1 - |N.z|`, so the whole figure keeps its
 registers a 256x256 texture descriptor, and the pass that fills it was not found. Stage light is up (diffuse 0.4, ambient 0.7 of the hemisphere ambient), matching the screenshot's mean luminance (185 against 183;
 saturation 0.31 against 0.26). `BloomStrength` is 2: the engine's file weight is 1 per layer, but the stand-in scene is darker than the game's and needs the extra to give the screenshot's glow on pale stone and clouds.
 
+## The game's compiled shaders, decompiled
+
+`Shaders/custom/*` (30 post programs) and `Shaders.arc` `cache/*` (2096 material programs) are NVIDIA GL program binaries holding plain Maxwell
+code; only the `Dummy` template is encrypted. `NvProgramBinary` reads them and `tools/SkywardShaderDecompile` turns every stage into GLSL with
+Ryujinx's translator, writing each fragment stage's immediate constants (constant buffer 1, the last 0x100 bytes of its blob) in as literals. All
+60 post stages and all 4192 material stages decompile. `desccache/*` holds a 632-byte record under each program's name, which looks like the GX
+configuration the program was built for; it is not decoded. The decompiled GLSL is not committed. Against the post shaders here:
+
+- **BloomMask.** The same equation: `colour * alpha * (luma - c5[0]) * c5[1].x`, luma weights 0.257, 0.504, 0.098. The game's mask scale is the
+  uniform `c5[1].x`; `bloom_mask.frag` fixes it at 2 and adds a sky test the game does not have.
+- **GaussianBlur.** Offsets 1.3846 and 3.2308 texels, weights 0.45405, 0.63243, 0.14054: gain 2 per pass, in the shader itself. The only uniform is the
+  texel size (`c5[0].x` or `.y`), so the halving that brings it to unit gain happens outside the shader (blend state or the composite) and is not traced.
+- **Paint_Constant / _NewKernel.** The four-tap max at the same offsets as `dilate.frag` (kernel 0 and 1). The output alpha is `c5[0].z`, so the
+  "constant" is a blend alpha the engine supplies; `PaintConstant` stands in for it.
+- **Paint_NearFar / Paint_Far.** No constant term: with `t = 1 / (c5[1].x - 1 + depth)` (linear in eye distance), far is `clamp(t * c5[1].w - c5[2].x)`,
+  near `clamp(t * c5[1].y - c5[1].z)`, and the pixel is the sharp scene mixed toward the four-tap max by `min(far + near, 1)`, written with alpha `c5[0].z`.
+  Pixels with a zero ramp keep the sharp colour.
+- **Dof_FogToAlpha / Dof_MaskNear.** The blur amount is `t * c5[1].y - c5[1].w` on the same reciprocal depth, scaled by `c5[0]` and clamped by the target;
+  the near mask is `floor(1 - amount)`, the hard cut `DofNear` already uses.
+
+Every remaining unknown in the post chain is a `c5` value the engine fills (mask scale, paint alpha, ramp coefficients), not shader code.
+
+## The post chain runs the game's programs
+
+`PostChain` now draws with the decompiled programs above (`GamePostPrograms`): nine fragment programs, decompiled and compiled once when the renderer
+starts, with a vertex shader of the renderer's own (the game's only place a quad and scale its coordinate by engine constants). The renderer supplies
+`c5`: texel sizes, the bloom thresholds and mask scale 2.0, and the depth ramps, which `DepthRamps` converts exactly from eye distances because the
+programs' `1 / (bias - 1 + depth)` is linear in eye distance for the right bias. The depth-of-field mix and the composite (fog, bloom, sRGB) stay the
+renderer's own, since the game does them with blend state outside `Shaders/custom`.
+
+Against the hand-written chain the frames match closely. The differences are the game's behaviour: the sky is no longer excluded from the paint and
+depth-of-field passes, so the paint image's max filter bleeds bright edges (Link's hands and ears) a few texels into the sky at the constant alpha, and
+distant sky blurs with depth of field. Still stand-ins: the paint alpha (`PaintConstant`), the order the constant and near/far paint passes blend in,
+and the blur's gain of 4, which the chain divides out where it uses the blurred images.
+
 ## Still open
 
 - The render pass behind `SSS`, the scene colour encoding behind the bloom strength, and which slot pair and blend factor the engine picks for a given time of day.

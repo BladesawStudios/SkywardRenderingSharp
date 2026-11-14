@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Decompiles the game's compiled shaders to GLSL into a folder. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SkywardRenderingSharp\SkywardRenderingSharp.csproj" />
+  </ItemGroup>
+
+</Project>

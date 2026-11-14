@@ -1,4 +1,4 @@
-using SkywardRenderingSharp.Content;
+﻿using SkywardRenderingSharp.Content;
 using Silk.NET.OpenGL;
 using SkywardRenderingSharp.Animation;
 using SkywardRenderingSharp.Gpu;
@@ -29,7 +29,7 @@ public sealed class SkywardRenderer : IDisposable
         _gl = gl; _rom = rom;
         _samplers = new SamplerCache(gl);
         _drawer = new ModelDrawer(gl, _samplers);
-        _post = new PostChain(gl);
+        _post = new PostChain(gl, rom);
         Lights = LightRig.Characters();
         Settings = new RenderSettings
         {

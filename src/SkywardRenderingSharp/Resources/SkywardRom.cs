@@ -3,6 +3,7 @@ using SkywardRenderingSharp.Archives;
 using SkywardRenderingSharp.Brres;
 using SkywardRenderingSharp.Content;
 using SkywardRenderingSharp.Lighting;
+using SkywardRenderingSharp.Shaders;
 using SkywardRenderingSharp.Textures;
 
 namespace SkywardRenderingSharp.Resources;
@@ -29,6 +30,9 @@ public sealed class SkywardRom
     {
         _romfs = romfs; _objectPack = objectPack; SystemTextures = new ModelTextures(new ModelArchive(new BresFile(systemModel), null), null, GradientRamps(systemArchive, lightmaps)); Lights = lights; Lightmaps = lightmaps; Post = post; CutsceneDof = dof;
     }
+
+    /// <summary>One of the game's compiled post-processing programs (<c>Shaders/custom</c>), such as <c>BloomMask_Custom</c>.</summary>
+    public NvProgramBinary PostProgram(string name) => NvProgramBinary.Read(File.ReadAllBytes(Path.Combine(_romfs, "Shaders", "custom", name)));
 
     public static SkywardRom Open(string romfs)
     {

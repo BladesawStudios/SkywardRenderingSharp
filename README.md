@@ -48,6 +48,13 @@ dotnet run --project tests/SkywardRenderingSharp.TestBench -c Release -- dump <r
 dotnet run --project tests/SkywardRenderingSharp.TestBench -c Release -- texcheck <romfs>            # decode every XTX texture in every archive
 ```
 
+The game's compiled shaders (the post programs in `Shaders/custom` and the material programs in `Shaders.arc.gz`) decompile to GLSL with
+`tools/SkywardShaderDecompile` (needs `git submodule update --init` for ShaderLibrary's translator):
+
+```bash
+dotnet run --project tools/SkywardShaderDecompile -c Release -- <romfs>/Shaders/custom out/custom
+```
+
 `render` takes `--post on|off`, `--dof on|off`, `--cull on|off`, `--light-set`, `--yaw`, `--distance`, `--target-y`, `--size`. It uses a hidden GLFW window.
 
 ## Documentation

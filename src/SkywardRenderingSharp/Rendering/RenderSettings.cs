@@ -13,7 +13,7 @@ public sealed class RenderSettings
     public bool DisableCulling { get; set; }
 
     public bool Paint { get; set; } = true;
-    // How far the painted (dilated) image replaces the scene everywhere, as the game's Paint_Constant passes do with the alpha they output; added to the distance ramps.
+    // The alpha the game's Paint_Constant pass lays the painted (dilated) image over the whole frame with; the engine's value is not traced.
     public float PaintConstant { get; set; } = 0.15f;
     public int PaintPasses { get; set; } = 3;
     public int PaintDownscale { get; set; } = 2;

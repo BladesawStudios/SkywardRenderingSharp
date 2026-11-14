@@ -9,7 +9,16 @@
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Renders Skyward Sword HD models with a GX uber shader and the game's painterly post-processing.</Description>
+    <!-- ShaderLibrary (Ryujinx's Maxwell translator) is a submodule in lib. A checkout of several libraries side by side sets SrsLibRoot so they share one. -->
+    <SrsLibRoot Condition="'$(SrsLibRoot)' == ''">$(MSBuildThisFileDirectory)..\..\lib</SrsLibRoot>
+    <RyujinxLibs>$(SrsLibRoot)\ShaderLibrary\ShaderLibrary.CompileTool\Libs</RyujinxLibs>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Ryujinx.Common" HintPath="$(RyujinxLibs)\Ryujinx.Common.dll" />
+    <Reference Include="Ryujinx.Graphics.Shader" HintPath="$(RyujinxLibs)\Ryujinx.Graphics.Shader.dll" />
+    <Reference Include="Spv.Generator" HintPath="$(RyujinxLibs)\Spv.Generator.dll" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
