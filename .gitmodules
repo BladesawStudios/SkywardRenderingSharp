@@ -1,3 +1,27 @@
 [submodule "lib/ShaderLibrary"]
 	path = lib/ShaderLibrary
 	url = https://github.com/BladesawStudios/ShaderLibrary.git
+[submodule "lib/LzSharp"]
+	path = lib/LzSharp
+	url = https://github.com/Mindstormman06/LzSharp.git
+[submodule "lib/U8Sharp"]
+	path = lib/U8Sharp
+	url = https://github.com/Mindstormman06/U8Sharp.git
+[submodule "lib/BresSharp"]
+	path = lib/BresSharp
+	url = https://github.com/Mindstormman06/BresSharp.git
+[submodule "lib/XtxSharp"]
+	path = lib/XtxSharp
+	url = https://github.com/Mindstormman06/XtxSharp.git
+[submodule "lib/TexSharp"]
+	path = lib/TexSharp
+	url = https://github.com/BladesawStudios/TexSharp.git
+[submodule "lib/BntxSharp"]
+	path = lib/BntxSharp
+	url = https://github.com/BladesawStudios/BntxSharp.git
+[submodule "lib/RevolutionEggSharp"]
+	path = lib/RevolutionEggSharp
+	url = https://github.com/Mindstormman06/RevolutionEggSharp.git
+[submodule "lib/SkywardPaletteSharp"]
+	path = lib/SkywardPaletteSharp
+	url = https://github.com/Mindstormman06/SkywardPaletteSharp.git
