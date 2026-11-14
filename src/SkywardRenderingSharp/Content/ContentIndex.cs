@@ -18,6 +18,8 @@ public sealed class ContentIndex
 
     public IEnumerable<string> ModelNames => _byModel.Keys.Order(StringComparer.OrdinalIgnoreCase);
 
+    public IEnumerable<ModelLocation> All => _byModel.Values.SelectMany(v => v);
+
     public IReadOnlyList<ModelLocation> Find(string model) => _byModel.TryGetValue(model, out var list) ? list : [];
 
     public IEnumerable<ModelLocation> Search(string text) =>

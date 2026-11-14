@@ -99,16 +99,19 @@ public sealed class SkywardRenderer : IDisposable
     {
         using var host = GlHostState.Enter(_gl);
         var archive = _rom.OpenStage(stage);
-        // SkyCmn is the object pack's shared texture package: the distant-view (WK2) island textures and the sky and cloud layers.
-        var common = Textures(_rom.OpenModelArchive("SkyCmn"));
-        var pool = Textures(archive.Props, common);
-        string roomName = room ?? archive.Rooms.First();
-        var roomFile = archive.Room(roomName);
-        var roomTextures = Textures(roomFile, pool);
-        // "model0_s" is the room's shadow-pass twin of "model0"; only the visible one is drawn.
-        var roomModels = roomFile.ModelNames.Where(m => !m.EndsWith("_s", StringComparison.Ordinal))
-            .Select(m => new LoadedModel(_gl, Mdl0Model.Read(roomFile.Bres, m), roomTextures)).ToList();
-        return new StageScene(stage, roomName, roomModels, ObjectModels(archive, "Cloud", common), ObjectModels(archive, "Vrbox", common).Take(1).ToList(),
+        var data = _rom.OpenRoom(stage, room ?? archive.Rooms.First());
+        return LoadRoom(data, archive);
+    }
+
+    /// <summary>Uploads a room read with <see cref="SkywardRom.OpenRoom"/>, with its stage's clouds and sky box.</summary>
+    public StageScene LoadRoom(RoomData data) => LoadRoom(data, _rom.OpenStage(data.Stage));
+
+    StageScene LoadRoom(RoomData data, StageArchive archive)
+    {
+        using var host = GlHostState.Enter(_gl);
+        var common = _rom.SkyTextures;
+        var roomModels = data.Models.Select(m => new LoadedModel(_gl, m, data.Textures)).ToList();
+        return new StageScene(data.Stage, data.Room, roomModels, ObjectModels(archive, "Cloud", common), ObjectModels(archive, "Vrbox", common).Take(1).ToList(),
             LightRig.FromBlight(_rom.Lights, 0, 0.4f, 1.2f));
     }
 

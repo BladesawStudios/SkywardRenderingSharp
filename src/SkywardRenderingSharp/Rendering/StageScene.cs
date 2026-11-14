@@ -5,7 +5,7 @@ namespace SkywardRenderingSharp.Rendering;
 /// <summary>A stage ready to draw: one room's geometry, the clouds that sit in the world, and the sky that follows the eye.</summary>
 /// <remarks>Room and cloud geometry is authored in world coordinates, so it is placed at the origin. The sky box is far larger than the far plane and
 /// is drawn first with its own projection, centred on the camera.</remarks>
-public sealed class StageScene
+public sealed class StageScene : IDisposable
 {
     readonly List<LoadedModel> _room, _clouds, _sky;
 
@@ -42,5 +42,10 @@ public sealed class StageScene
             foreach (var mesh in model.Model.Meshes)
                 foreach (var v in mesh.Vertices) { min = Vector3.Min(min, v.Position); max = Vector3.Max(max, v.Position); }
         return (min, max);
+    }
+
+    public void Dispose()
+    {
+        foreach (var model in Models) model.Dispose();
     }
 }

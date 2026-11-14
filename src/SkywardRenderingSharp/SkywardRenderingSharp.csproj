@@ -21,6 +21,7 @@
     <ProjectReference Include="$(SrsLibRoot)\TexSharp\src\TexSharp\TexSharp.csproj" />
     <ProjectReference Include="$(SrsLibRoot)\RevolutionEggSharp\src\RevolutionEggSharp\RevolutionEggSharp.csproj" />
     <ProjectReference Include="$(SrsLibRoot)\SkywardPaletteSharp\src\SkywardPaletteSharp\SkywardPaletteSharp.csproj" />
+    <ProjectReference Include="$(SrsLibRoot)\BzsSharp\src\BzsSharp\BzsSharp.csproj" />
     <Reference Include="Ryujinx.Common" HintPath="$(RyujinxLibs)\Ryujinx.Common.dll" />
     <Reference Include="Ryujinx.Graphics.Shader" HintPath="$(RyujinxLibs)\Ryujinx.Graphics.Shader.dll" />
     <Reference Include="Spv.Generator" HintPath="$(RyujinxLibs)\Spv.Generator.dll" />

@@ -121,6 +121,31 @@ public sealed class SkywardRom
         return _containers[path] = path.EndsWith("ObjectPack.arc.LZ", StringComparison.OrdinalIgnoreCase) ? _objectPack : GameArchive.OpenFile(Path.Combine(_romfs, path));
     }
 
+    /// <summary>The stages the romfs holds (Stage/*/NX/*_stg_l0.arc.LZ), by name: "F000" is Skyloft.</summary>
+    public IEnumerable<string> StageNames => Directory.EnumerateDirectories(Path.Combine(_romfs, "Stage"))
+        .Select(Path.GetFileName).OfType<string>().Where(s => File.Exists(Path.Combine(_romfs, "Stage", s, "NX", $"{s}_stg_l0.arc.LZ"))).Order(StringComparer.Ordinal);
+
+    /// <summary>Every room with models, by stage then room ("F000", "F000_r00"): the rarc archives of each stage's first archive, as the
+    /// content index lists them, so nothing is decompressed once the index is built.</summary>
+    public IEnumerable<(string Stage, string Room)> RoomNames => Index.All
+        .Where(l => l.Chain is [var room] && room.StartsWith("rarc/", StringComparison.Ordinal) && l.Container.EndsWith("_stg_l0.arc.LZ", StringComparison.OrdinalIgnoreCase))
+        .Select(l => (Stage: Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(l.Container)))!, Room: l.Archive)).Distinct().Order();
+
+    /// <summary>The textures every stage's models fall back to: the object pack's SkyCmn package (sky, clouds, distant islands), then the engine's own.</summary>
+    public ModelTextures SkyTextures => _skyTextures ??= new ModelTextures(OpenModelArchive("SkyCmn"), SystemTextures);
+
+    ModelTextures? _skyTextures;
+
+    /// <summary>One room of a stage, read but not uploaded: its models (without the shadow-pass "_s" twins), the textures they resolve through
+    /// (the room's, the stage's shared pool, then <see cref="SkyTextures"/>), and the objects its room.bzs places.</summary>
+    public RoomData OpenRoom(string stage, string room)
+    {
+        var archive = OpenStage(stage);
+        var file = archive.Room(room);
+        var models = file.ModelNames.Where(m => !m.EndsWith("_s", StringComparison.Ordinal)).Select(m => Mdl0Model.Read(file.Bres, m)).ToList();
+        return new RoomData(stage, room, models, new ModelTextures(file, new ModelTextures(archive.Props, SkyTextures)), archive.RoomPlacements(room));
+    }
+
     /// <summary>Opens a stage's first archive: its shared prop models and textures, its rooms and its object archives.</summary>
     public StageArchive OpenStage(string stage)
     {
@@ -175,4 +200,10 @@ public sealed class StageArchive
         .Select(p => Path.GetFileNameWithoutExtension(p)).Order();
 
     public ModelArchive Object(string name) => ModelArchive.Read(GameArchive.Open(_archive.Get($"oarc/{name}.arc")), "g3d/model.brres", "g3d/model.xtx");
+
+    /// <summary>The objects a room places: every actor record of its dat/room.bzs, on every layer.</summary>
+    public IReadOnlyList<Placement> RoomPlacements(string room) => Placement.Read(GameArchive.Open(_archive.Get($"rarc/{room}.arc")).Get("dat/room.bzs"));
+
+    /// <summary>The objects the stage itself places (dat/stage.bzs): the ones that belong to no single room.</summary>
+    public IReadOnlyList<Placement> StagePlacements => Placement.Read(_archive.Get("dat/stage.bzs"));
 }
