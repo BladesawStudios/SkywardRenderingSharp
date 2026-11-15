@@ -35,6 +35,7 @@
     <InternalsVisibleTo Include="SkywardRenderingSharp.TestBench" />
     <InternalsVisibleTo Include="SkywardRenderingSharp.Tests" />
     <EmbeddedResource Include="Glsl\**\*" LogicalName="Glsl/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Resources\actors.json" LogicalName="Resources/actors.json" />
   </ItemGroup>
 
 </Project>

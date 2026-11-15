@@ -126,4 +126,26 @@ public class ContentTests
         Assert.Equal(10f, rom.CutsceneDof.FarWidth);
         Assert.Equal(0.535f, rom.Post.BloomMaskThreshold.X, 3);
     }
+
+    [RomFact]
+    public void ActorTableNamesOnlyModelsTheDumpHolds()
+    {
+        var all = Romfs.Rom!.Index.All.ToList();
+        bool Holds(ActorPart part) => all.Any(l => l.Model.Equals(part.Model, StringComparison.OrdinalIgnoreCase) && (part.Archive is null
+            ? l.Chain.Length == 0 && l.BresPath == "g3d/stage.brres"
+            : l.Chain is [.., var last] && last.StartsWith("oarc/", StringComparison.Ordinal) && l.Archive.Equals(part.Archive, StringComparison.OrdinalIgnoreCase)));
+        Assert.True(ActorModels.Default.Actors.Count() > 50);
+        Assert.DoesNotContain(ActorModels.Default.Parts, p => !Holds(p));
+    }
+
+    [RomFact]
+    public void SkyloftDrawsItsPotsWhereTheyStand()
+    {
+        var room = Romfs.Rom!.OpenRoom("F000", "F000_r00");
+        Assert.Empty(room.MissingParts);
+        var pots = room.Placements.Select((p, i) => (p, i)).Where(x => x.p.Actor == "Tubo" && x.p.AlwaysPresent).ToList();
+        Assert.NotEmpty(pots);
+        Assert.All(pots, x => Assert.Contains(room.Drawn[x.i], m => room.ObjectModels[m].Model.Name.StartsWith("Tubo", StringComparison.Ordinal)));
+        Assert.All(room.Placements.Select((p, i) => (p, i)).Where(x => !x.p.AlwaysPresent), x => Assert.Empty(room.Drawn[x.i]));
+    }
 }

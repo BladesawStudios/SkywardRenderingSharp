@@ -92,13 +92,13 @@ public sealed class SkywardRom
     public IEnumerable<string> ModelArchives => _objectPack.Paths().Where(p => p.StartsWith("oarc/", StringComparison.Ordinal) && p.EndsWith(".arc", StringComparison.Ordinal))
         .Select(p => Path.GetFileNameWithoutExtension(p));
 
-    /// <summary>Opens an animation library archive such as PLCommonAnime (Link's clips).</summary>
     /// <summary>The clips a model can play: its own file's, and Link's shared library (PLCommonAnime) when its skeleton is Link's (it has "backbone1").</summary>
     public AnimationSet AnimationsOf(ModelArchive package, Mdl0Model model) =>
         new(package.Bres, model.Bones.Any(b => b.Name == "backbone1") && Index.Find("al").Count > 0 ? _linkClips ??= OpenAnimations("PLCommonAnime") : null);
 
     AnimationLibrary? _linkClips;
 
+    /// <summary>Opens an animation library archive such as PLCommonAnime (Link's clips).</summary>
     public AnimationLibrary OpenAnimations(string name) =>
         new(GameArchive.Open(_objectPack.Get($"oarc/{name}.arc")).Get("g3d/model.brres"));
 
@@ -137,13 +137,18 @@ public sealed class SkywardRom
     ModelTextures? _skyTextures;
 
     /// <summary>One room of a stage, read but not uploaded: its models (without the shadow-pass "_s" twins), the textures they resolve through
-    /// (the room's, the stage's shared pool, then <see cref="SkyTextures"/>), and the objects its room.bzs places.</summary>
+    /// (the room's, the stage's shared pool, then <see cref="SkyTextures"/>), the objects its room.bzs places, and the models
+    /// <see cref="ActorModels.Default"/> says the always-present ones draw.</summary>
     public RoomData OpenRoom(string stage, string room)
     {
         var archive = OpenStage(stage);
         var file = archive.Room(room);
+        var pool = new ModelTextures(archive.Props, SkyTextures);
         var models = file.ModelNames.Where(m => !m.EndsWith("_s", StringComparison.Ordinal)).Select(m => Mdl0Model.Read(file.Bres, m)).ToList();
-        return new RoomData(stage, room, models, new ModelTextures(file, new ModelTextures(archive.Props, SkyTextures)), archive.RoomPlacements(room));
+        var placements = archive.RoomPlacements(room);
+        var objects = new RoomObjectModels(this, archive, pool);
+        var drawn = placements.Select(p => p.AlwaysPresent ? objects.Of(ActorModels.Default.PartsOf(p)) : []).ToList();
+        return new RoomData(stage, room, models, new ModelTextures(file, pool), placements, objects.Models, drawn, objects.Missing);
     }
 
     /// <summary>Opens a stage's first archive: its shared prop models and textures, its rooms and its object archives.</summary>
