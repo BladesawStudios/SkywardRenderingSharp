@@ -138,17 +138,31 @@ public sealed class SkywardRom
 
     /// <summary>One room of a stage, read but not uploaded: its models (without the shadow-pass "_s" twins), the textures they resolve through
     /// (the room's, the stage's shared pool, then <see cref="SkyTextures"/>), the objects its room.bzs places, and the models
-    /// <see cref="ActorModels.Default"/> says the always-present ones draw.</summary>
-    public RoomData OpenRoom(string stage, string room)
+    /// <see cref="ActorModels.Default"/> says the always-present ones and those on the chosen story layers draw.</summary>
+    public RoomData OpenRoom(string stage, string room, Func<int, bool>? layers = null)
     {
         var archive = OpenStage(stage);
         var file = archive.Room(room);
         var pool = new ModelTextures(archive.Props, SkyTextures);
         var models = file.ModelNames.Where(m => !m.EndsWith("_s", StringComparison.Ordinal)).Select(m => Mdl0Model.Read(file.Bres, m)).ToList();
-        var placements = archive.RoomPlacements(room);
+        return Place(archive, room, models, new ModelTextures(file, pool), pool, archive.RoomPlacements(room), layers);
+    }
+
+    /// <summary>The objects a stage places itself (its stage.bzs: the doors between rooms, Timeshift Stones and the like), read as a room with no
+    /// models of its own whose <see cref="RoomData.Room"/> is null.</summary>
+    public RoomData OpenStageObjects(string stage, Func<int, bool>? layers = null)
+    {
+        var archive = OpenStage(stage);
+        var pool = new ModelTextures(archive.Props, SkyTextures);
+        return Place(archive, null, [], pool, pool, archive.StagePlacements, layers);
+    }
+
+    RoomData Place(StageArchive archive, string? room, IReadOnlyList<Mdl0Model> models, ModelTextures textures, ModelTextures pool, IReadOnlyList<Placement> placements,
+        Func<int, bool>? layers)
+    {
         var objects = new RoomObjectModels(this, archive, pool);
-        var drawn = placements.Select(p => p.AlwaysPresent ? objects.Of(ActorModels.Default.PartsOf(p)) : []).ToList();
-        return new RoomData(stage, room, models, new ModelTextures(file, pool), placements, objects.Models, drawn, objects.Missing);
+        var drawn = placements.Select(p => p.AlwaysPresent || layers?.Invoke(p.Layer) == true ? objects.Of(ActorModels.Default.PartsOf(p)) : []).ToList();
+        return new RoomData(archive.Name, room, models, textures, placements, objects.Models, drawn, objects.Missing);
     }
 
     /// <summary>Opens a stage's first archive: its shared prop models and textures, its rooms and its object archives.</summary>

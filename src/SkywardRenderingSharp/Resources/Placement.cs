@@ -38,12 +38,17 @@ public sealed record Placement(string Actor, string Kind, int Layer, Vector3 Pos
 /// <summary>A model a room's placements draw, with the textures it resolves through.</summary>
 public sealed record PlacedModel(ActorPart Part, Mdl0Model Model, ModelTextures Textures);
 
-/// <summary>One room of a stage, read but not uploaded: its models, the textures they resolve through, the objects it places, and the
-/// models those objects draw.</summary>
+/// <summary>One room of a stage, or the stage's own placements, read but not uploaded: its models, the textures they resolve through, the
+/// objects it places, and the models those objects draw.</summary>
 /// <remarks>
-/// Room geometry is authored in world coordinates, so the models are placed at the origin. Drawn lists, for each placement, the
-/// <see cref="ObjectModels"/> it draws at its <see cref="Placement.World"/>, as <see cref="ActorModels"/> resolves it: only the
-/// always-present placements draw, since the other layers' variants overlap. MissingParts are the parts no archive in the dump holds.
+/// Room geometry is authored in world coordinates, so the models are placed at the origin. Room is null for the stage's own placements,
+/// which have no models. Drawn lists, for each placement, the <see cref="ObjectModels"/> it draws at <see cref="WorldOf"/>, as
+/// <see cref="ActorModels"/> resolves it: the always-present placements draw, and those on the story layers the reader chose, since a
+/// stage loads layer 0 and one story layer and the others' variants overlap. MissingParts are the parts no archive in the dump holds.
 /// </remarks>
-public sealed record RoomData(string Stage, string Room, IReadOnlyList<Mdl0Model> Models, ModelTextures Textures, IReadOnlyList<Placement> Placements,
-    IReadOnlyList<PlacedModel> ObjectModels, IReadOnlyList<int[]> Drawn, IReadOnlyList<ActorPart> MissingParts);
+public sealed record RoomData(string Stage, string? Room, IReadOnlyList<Mdl0Model> Models, ModelTextures Textures, IReadOnlyList<Placement> Placements,
+    IReadOnlyList<PlacedModel> ObjectModels, IReadOnlyList<int[]> Drawn, IReadOnlyList<ActorPart> MissingParts)
+{
+    /// <summary>Where a placement's models stand, as <see cref="ActorModels.WorldOf"/> says.</summary>
+    public Matrix4x4 WorldOf(int placement) => ActorModels.Default.WorldOf(Placements[placement]);
+}

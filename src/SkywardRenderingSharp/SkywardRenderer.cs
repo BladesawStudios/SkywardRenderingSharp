@@ -103,7 +103,8 @@ public sealed class SkywardRenderer : IDisposable
         return LoadRoom(data, archive);
     }
 
-    /// <summary>Uploads a room read with <see cref="SkywardRom.OpenRoom"/>, with its placed objects' models and its stage's clouds and sky box.</summary>
+    /// <summary>Uploads a room read with <see cref="SkywardRom.OpenRoom"/>, with its placed objects' models and its stage's clouds and sky box; the
+    /// stage's own objects (<see cref="SkywardRom.OpenStageObjects"/>) come without them, since a room of the stage brings them.</summary>
     public StageScene LoadRoom(RoomData data) => LoadRoom(data, _rom.OpenStage(data.Stage));
 
     StageScene LoadRoom(RoomData data, StageArchive archive)
@@ -112,8 +113,9 @@ public sealed class SkywardRenderer : IDisposable
         var common = _rom.SkyTextures;
         var roomModels = data.Models.Select(m => new LoadedModel(_gl, m, data.Textures)).ToList();
         var objects = data.ObjectModels.Select(o => new LoadedModel(_gl, o.Model, o.Textures)).ToList();
-        var placed = data.Placements.SelectMany((p, i) => data.Drawn[i].Select(model => (model, p.World))).ToList();
-        return new StageScene(data.Stage, data.Room, roomModels, ObjectModels(archive, "Cloud", common), ObjectModels(archive, "Vrbox", common).Take(1).ToList(),
+        var placed = data.Placements.SelectMany((p, i) => data.Drawn[i].Select(model => (model, data.WorldOf(i)))).ToList();
+        bool room = data.Room is not null;
+        return new StageScene(data.Stage, data.Room, roomModels, room ? ObjectModels(archive, "Cloud", common) : [], room ? ObjectModels(archive, "Vrbox", common).Take(1).ToList() : [],
             LightRig.FromBlight(_rom.Lights, 0, 0.4f, 1.2f), objects, placed);
     }
 

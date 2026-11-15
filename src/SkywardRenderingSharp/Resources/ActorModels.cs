@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -14,6 +15,7 @@ public sealed record ActorPart(string? Archive, string Model);
 /// together, main model first; a value with no variant takes the actor's fallback, if it has one. An actor the table does not list, or
 /// lists as drawing nothing (tags, spawners, effects), has no parts, and neither has one whose value selects no variant. A backdrop is
 /// scenery drawn far beyond the room, such as the cloud sea under the sky or another island's distant stand-in, whose extent says nothing about the room's.
+/// An actor with a scale of its own reads the placement's scale as something else (a Timeshift Stone's radius) and draws at that one.
 /// </remarks>
 public sealed class ActorModels
 {
@@ -25,7 +27,7 @@ public sealed class ActorModels
         [property: JsonPropertyName("otherwise")] int? Otherwise);
 
     sealed record Entry([property: JsonPropertyName("select")] Selection? Select, [property: JsonPropertyName("variants")] List<List<Part>>? Variants,
-        [property: JsonPropertyName("backdrop")] bool Backdrop);
+        [property: JsonPropertyName("backdrop")] bool Backdrop, [property: JsonPropertyName("scale")] float? Scale);
 
     readonly Dictionary<string, Entry> _actors;
 
@@ -47,6 +49,10 @@ public sealed class ActorModels
     internal IEnumerable<ActorPart> Parts => _actors.Values.SelectMany(e => e.Variants!).SelectMany(v => v).Select(p => new ActorPart(p.Stage ? null : p.Arc, p.Model)).Distinct();
 
     public bool IsBackdrop(string actor) => _actors.TryGetValue(actor, out var entry) && entry.Backdrop;
+
+    /// <summary>Where a placement's models stand: its <see cref="Placement.World"/>, at the actor's own scale when it has one.</summary>
+    public Matrix4x4 WorldOf(Placement placement) =>
+        _actors.TryGetValue(placement.Actor, out var entry) && entry.Scale is float scale ? (placement with { Scale = new Vector3(scale) }).World : placement.World;
 
     public IReadOnlyList<ActorPart> PartsOf(Placement placement)
     {

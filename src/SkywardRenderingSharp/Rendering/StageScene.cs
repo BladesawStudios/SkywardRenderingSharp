@@ -11,12 +11,13 @@ public sealed class StageScene : IDisposable
     readonly List<(int Model, Matrix4x4 World)> _placed;
 
     public string Name { get; }
-    public string Room { get; }
+    /// <summary>The room drawn, or null for the stage's own objects alone.</summary>
+    public string? Room { get; }
 
     /// <summary>The lights to draw the stage with. Stage materials store a white ambient colour and rely on a bright scene ambient.</summary>
     public Lighting.LightRig Lights { get; }
 
-    internal StageScene(string name, string room, List<LoadedModel> roomModels, List<LoadedModel> clouds, List<LoadedModel> sky, Lighting.LightRig lights,
+    internal StageScene(string name, string? room, List<LoadedModel> roomModels, List<LoadedModel> clouds, List<LoadedModel> sky, Lighting.LightRig lights,
         List<LoadedModel>? objects = null, List<(int Model, Matrix4x4 World)>? placed = null)
     {
         Lights = lights; Name = name; Room = room; _room = roomModels; _clouds = clouds; _sky = sky; _objects = objects ?? []; _placed = placed ?? [];

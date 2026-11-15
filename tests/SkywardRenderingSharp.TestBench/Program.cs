@@ -13,6 +13,7 @@ using SkywardRenderingSharp.Resources;
 // TestBench textures <romfs> <archive> <out.png>    contact sheet of an archive's textures
 // TestBench texcheck <romfs>                        decode every XTX texture in every archive
 // TestBench clips    <romfs>                        list Link's animation clips
+// TestBench layers   <romfs> <out.json>             count every stage's story-layer placements (Resources/layers.json)
 // TestBench render   <romfs> <out.png> [--post on|off] [--count N] [--spacing S] [--yaw DEG] [--size WxH] [--distance D] [--target-y Y]
 //                    [--clip NAME] [--frame F] [--face NAME] [--face-frame F] [--dof on|off] [--light-set N] [--cull on|off]
 if (args.Length < 2) { Console.WriteLine("usage: dump|textures|texcheck|clips|render ..."); return 1; }
@@ -24,12 +25,20 @@ return args[0] switch
     "object" => Info(rom, args[2]),
     "texcheck" => TexCheck(rom),
     "clips" => Clips(rom),
+    "layers" => Layers(rom, args[2]),
     "find" => Find(rom, args[2]),
     "lightmaps" => Lightmaps(rom),
     "gra" => Gra(args[1]),
     "texstats" => TexStats(rom, args[2], args[3]),
     _ => Render(rom, args),
 };
+
+static int Layers(SkywardRom rom, string path)
+{
+    using var file = File.Create(path);
+    StageLayers.Count(rom).Write(file);
+    return 0;
+}
 
 static string Opt(string[] a, string name, string fallback) => Array.IndexOf(a, name) is var i and >= 0 && i + 1 < a.Length ? a[i + 1] : fallback;
 

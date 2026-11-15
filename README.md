@@ -34,9 +34,11 @@ uint texture = renderer.Render(camera, link.Instances(Matrix4x4.Identity, pose, 
   `SkywardRenderer.UseCutsceneDepthOfField()` applies the game's depth-of-field file.
 - `LightRig` - up to eight directional lights; `FromBlight` builds one of the game's 16 light sets.
 - `SkywardRom.OpenRoom` / `SkywardRenderer.LoadRoom` - a stage room with its placements (`Placement`, read through BzsSharp) and the models
-  they draw. `ActorModels` says which models a placed actor draws from its name and params: `Resources/actors.json`, read from the
+  they draw, on layer 0 and the story layers asked for; `OpenStageObjects` reads the stage's own placements (room shutters, Timeshift
+  Stones) the same way. `ActorModels` says which models a placed actor draws from its name and params: `Resources/actors.json`, read from the
   [zeldaret/ss](https://github.com/zeldaret/ss) decompilation's actors and, where it has not reached yet, from the HD executable's code,
-  and checked against the HD dump (449 actors, every placed one with a model of its own; an entry's `source` says which).
+  and checked against the HD dump (456 actors, every placed one with a model of its own; an entry's `source` says which).
+  `StageLayers` counts each stage's story-layer placements (`Resources/layers.json`, from `TestBench layers`).
 - The world is right-handed and Y-up, in the game's centimetre-scale units.
 
 ## Building

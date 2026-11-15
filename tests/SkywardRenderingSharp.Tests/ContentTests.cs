@@ -148,4 +148,20 @@ public class ContentTests
         Assert.All(pots, x => Assert.Contains(room.Drawn[x.i], m => room.ObjectModels[m].Model.Name.StartsWith("Tubo", StringComparison.Ordinal)));
         Assert.All(room.Placements.Select((p, i) => (p, i)).Where(x => !x.p.AlwaysPresent), x => Assert.Empty(room.Drawn[x.i]));
     }
+
+    [RomFact]
+    public void AChosenStoryLayerDrawsAndTheOthersDoNot()
+    {
+        var room = Romfs.Rom!.OpenRoom("F000", "F000_r00", layer => layer == 1);
+        var placed = room.Placements.Select((p, i) => (p, i)).ToList();
+        Assert.Contains(placed, x => x.p.Layer == 1 && room.Drawn[x.i].Length > 0);
+        Assert.All(placed.Where(x => x.p.Layer > 1), x => Assert.Empty(room.Drawn[x.i]));
+    }
+
+    [RomFact]
+    public void LayerTableMatchesTheDump()
+    {
+        Assert.True(StageLayers.Default.Of("F000").Count > 10);
+        Assert.True(StageLayers.Count(Romfs.Rom!).SameAs(StageLayers.Default));
+    }
 }
